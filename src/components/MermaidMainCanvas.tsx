@@ -158,6 +158,108 @@ export default function MermaidMainCanvas({ block }: Props) {
     })
   }, [graph.edges, graph.kind, participantLabelById])
 
+  const sequenceParticipantSignals = useMemo(() => {
+    if (!selectedNodeId || graph.kind !== 'sequence') {
+      return []
+    }
+
+    return sequenceSignals.filter(
+      (signal) => signal.fromId === selectedNodeId || signal.toId === selectedNodeId
+    )
+  }, [graph.kind, selectedNodeId, sequenceSignals])
+
+  const sequenceCanvas = useMemo(() => {
+    if (graph.kind !== 'sequence') {
+      return { nodes: [] as Node[], edges: [] as Edge[] }
+    }
+
+    const participantX = new Map<string, number>()
+    const participantNodes: Node[] = graph.nodes.map((node, index) => {
+      const x = 80 + index * 260
+      participantX.set(node.id, x)
+      const label = (node.data as { label?: string } | undefined)?.label ?? node.id
+      const focused = selectedNodeId === node.id
+      return {
+        id: `p-${node.id}`,
+        position: { x, y: 40 },
+        data: { label },
+        draggable: false,
+        selectable: true,
+        style: {
+          border: focused ? '1px solid #facc15' : '1px solid #334155',
+          borderRadius: 8,
+          background: focused ? '#28220a' : '#111827',
+          color: '#e5e7eb',
+          padding: 8,
+          width: 180,
+          textAlign: 'center',
+          fontSize: 11,
+          fontWeight: 700,
+        },
+      }
+    })
+
+    const messageNodes: Node[] = sequenceSignals.map((signal, index) => {
+      const fromX = participantX.get(signal.fromId) ?? 80
+      const toX = participantX.get(signal.toId) ?? 80
+      const x = Math.round((fromX + toX) / 2)
+      const y = 150 + index * 72
+      const active = signal.id === selectedEdgeId
+      return {
+        id: `m-${signal.id}`,
+        position: { x, y },
+        data: {
+          label: `#${signal.order} ${signal.signal}`,
+        },
+        draggable: false,
+        selectable: true,
+        style: {
+          border: active ? '1px solid #facc15' : '1px solid #334155',
+          borderRadius: 8,
+          background: active ? '#2a2408' : '#0b1220',
+          color: active ? '#fde68a' : '#cbd5e1',
+          padding: '6px 8px',
+          width: 260,
+          textAlign: 'left',
+          fontSize: 11,
+          lineHeight: 1.35,
+          boxShadow: active ? '0 0 0 1px #facc15' : 'none',
+        },
+      }
+    })
+
+    const connectionEdges: Edge[] = sequenceSignals.flatMap((signal) => {
+      const active = signal.id === selectedEdgeId
+      const participantFocused = selectedNodeId
+        ? signal.fromId === selectedNodeId || signal.toId === selectedNodeId
+        : false
+      const focused = active || participantFocused
+      const color = focused ? '#facc15' : '#475569'
+      return [
+        {
+          id: `p2m-${signal.id}`,
+          source: `p-${signal.fromId}`,
+          target: `m-${signal.id}`,
+          style: { stroke: color, strokeWidth: focused ? 2 : 1.3, opacity: selectedEdgeId || selectedNodeId ? (focused ? 1 : 0.25) : 0.75 },
+          animated: focused,
+        },
+        {
+          id: `m2p-${signal.id}`,
+          source: `m-${signal.id}`,
+          target: `p-${signal.toId}`,
+          markerEnd: { type: MarkerType.ArrowClosed, width: 16, height: 16, color },
+          style: { stroke: color, strokeWidth: focused ? 2 : 1.3, opacity: selectedEdgeId || selectedNodeId ? (focused ? 1 : 0.25) : 0.75 },
+          animated: focused,
+        },
+      ]
+    })
+
+    return {
+      nodes: [...participantNodes, ...messageNodes],
+      edges: connectionEdges,
+    }
+  }, [graph.kind, graph.nodes, selectedEdgeId, selectedNodeId, sequenceSignals])
+
   if (viewMode === 'exact') {
     return (
       <div className="main-mermaid-shell">
@@ -226,11 +328,43 @@ export default function MermaidMainCanvas({ block }: Props) {
         </div>
 
         <div className="main-seq-wrap">
+          <div className="main-seq-diagram">
+            <ReactFlow
+              nodes={sequenceCanvas.nodes}
+              edges={sequenceCanvas.edges}
+              fitView
+              fitViewOptions={{ padding: 0.16 }}
+              nodesDraggable={false}
+              nodesConnectable={false}
+              onPaneClick={() => {
+                setSelectedEdgeId(null)
+                setSelectedNodeId(null)
+              }}
+              onNodeClick={(_, node) => {
+                if (node.id.startsWith('m-')) {
+                  setSelectedEdgeId(node.id.slice(2))
+                  setSelectedNodeId(null)
+                  return
+                }
+
+                if (node.id.startsWith('p-')) {
+                  setSelectedNodeId(node.id.slice(2))
+                  setSelectedEdgeId(null)
+                }
+              }}
+              style={{ background: '#070f1d' }}
+            >
+              <Background variant={BackgroundVariant.Dots} gap={22} size={1} color="#1e293b" />
+              <Controls position="bottom-left" />
+            </ReactFlow>
+          </div>
+
           <div className="main-seq-participants">
             {graph.nodes.map((node) => {
               const label = (node.data as { label?: string } | undefined)?.label ?? node.id
+              const active = selectedNodeId === node.id
               return (
-                <div key={node.id} className="main-seq-participant-chip">
+                <div key={node.id} className={`main-seq-participant-chip ${active ? 'is-active' : ''}`}>
                   {String(label)}
                 </div>
               )
@@ -239,7 +373,9 @@ export default function MermaidMainCanvas({ block }: Props) {
 
           <div className="main-seq-list" role="list" aria-label="Sequence signals list">
             {sequenceSignals.map((signal) => {
-              const active = signal.id === selectedEdgeId
+              const active =
+                signal.id === selectedEdgeId ||
+                Boolean(selectedNodeId && (signal.fromId === selectedNodeId || signal.toId === selectedNodeId))
               return (
                 <button
                   key={signal.id}
@@ -267,10 +403,19 @@ export default function MermaidMainCanvas({ block }: Props) {
               <strong>Selected signal line {selectedSignal.lineData.lineNumber}:</strong>
               <pre>{selectedSignal.lineData.lineText}</pre>
             </div>
+          ) : sequenceParticipantSignals.length > 0 ? (
+            <div>
+              <strong>Participant {selectedNodeId} linked lines:</strong>
+              <pre>
+                {sequenceParticipantSignals
+                  .map((signal) => `L${signal.lineData.lineNumber}: ${signal.lineData.lineText.trim()}`)
+                  .join('\n')}
+              </pre>
+            </div>
           ) : (
             <div>
               <strong>Inspector:</strong>
-              <pre>Click a signal row to view exact Mermaid source line.</pre>
+              <pre>Click signal row, message node, or participant node to inspect source line relationships.</pre>
             </div>
           )}
         </div>
