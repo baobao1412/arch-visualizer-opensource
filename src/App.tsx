@@ -1,11 +1,19 @@
-import { useState } from 'react'
+import { lazy, Suspense, useMemo, useState } from 'react'
 import { ReactFlowProvider } from '@xyflow/react'
 import FlowSidebar from './components/FlowSidebar'
 import ArchDiagram from './components/ArchDiagram'
 import { FLOWS } from './data/flows'
 
+const MarkdownDiagramPanel = lazy(() => import('./components/MarkdownDiagramPanel'))
+
 export default function App() {
   const [activeFlowId, setActiveFlowId] = useState<string | null>(null)
+  const [panelOpen, setPanelOpen] = useState<boolean>(false)
+
+  const activeFlow = useMemo(
+    () => FLOWS.find((flow) => flow.id === activeFlowId) ?? null,
+    [activeFlowId]
+  )
 
   return (
     <div
@@ -18,7 +26,7 @@ export default function App() {
     >
       <header
         style={{
-          height: 48,
+          minHeight: 48,
           borderBottom: '1px solid #1e293b',
           display: 'flex',
           alignItems: 'center',
@@ -26,6 +34,7 @@ export default function App() {
           gap: 12,
           flexShrink: 0,
           background: '#0c0e18',
+          flexWrap: 'wrap',
         }}
       >
         <span
@@ -40,9 +49,26 @@ export default function App() {
         </span>
         <span style={{ fontSize: 11, color: '#334155' }}>-</span>
         <span style={{ fontSize: 11, color: '#475569' }}>Architecture and Flows</span>
-        <span
+
+        <button
+          type="button"
+          onClick={() => setPanelOpen(true)}
           style={{
             marginLeft: 'auto',
+            fontSize: 11,
+            color: '#dbeafe',
+            background: '#102744',
+            border: '1px solid #1f4f80',
+            borderRadius: 6,
+            padding: '5px 10px',
+            cursor: 'pointer',
+          }}
+        >
+          README Mermaid Viewer
+        </button>
+
+        <span
+          style={{
             fontSize: 10,
             color: '#1e3a5f',
             background: '#0d1f35',
@@ -61,6 +87,16 @@ export default function App() {
           <ArchDiagram activeFlowId={activeFlowId} />
         </ReactFlowProvider>
       </div>
+
+      <Suspense fallback={null}>
+        {panelOpen ? (
+          <MarkdownDiagramPanel
+            open={panelOpen}
+            onClose={() => setPanelOpen(false)}
+            activeFlow={activeFlow}
+          />
+        ) : null}
+      </Suspense>
     </div>
   )
 }

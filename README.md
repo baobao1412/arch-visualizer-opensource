@@ -12,6 +12,7 @@ An interactive web-based architecture diagram visualizer for system design flows
 - 🚀 **Fast & Lightweight** — Built with React, TypeScript, React Flow, and Tailwind CSS
 - 🎮 **Zoom & Pan** — Native ReactFlow controls for navigation
 - 📱 **Responsive** — Works on desktop and mobile
+- 🧩 **README Mermaid Viewer** — Load Markdown/README and render Mermaid `sequenceDiagram` + `classDiagram` blocks
 
 ## Prerequisites
 
@@ -28,7 +29,7 @@ cd /path/to/arch-visualizer
 
 # Or clone from GitHub
 git clone https://github.com/baobao1412/arch-visualizer-opensource.git
-cd arch-visualizer
+cd arch-visualizer-opensource
 ```
 
 ### Install Dependencies
@@ -63,6 +64,47 @@ npm run build
 npm run preview
 ```
 
+
+## README Mermaid Support
+
+Open the **README Mermaid Viewer** button in the top header and:
+
+1. Paste Markdown that contains Mermaid code blocks
+2. Or click **Load README .md** to import a local README file
+3. Select detected blocks and preview rendered diagrams instantly
+
+Supported block types:
+
+- `sequenceDiagram`
+- `classDiagram`
+- Other Mermaid syntaxes are also parsed and rendered when valid
+
+Example Markdown block:
+
+```mermaid
+sequenceDiagram
+participant Client
+participant API
+participant DB
+Client->>API: GET /devices
+API->>DB: Query latest telemetry
+DB-->>API: Rows
+API-->>Client: JSON response
+```
+
+```mermaid
+classDiagram
+class DeviceService {
+  +listDevices() Device[]
+  +getTelemetry(id) Telemetry
+}
+class DeviceRepository {
+  +findAll() Device[]
+  +findTelemetry(id) Telemetry
+}
+DeviceService --> DeviceRepository : uses
+```
+
 ## Project Structure
 
 ```
@@ -72,9 +114,13 @@ arch-visualizer/
 │   │   ├── ArchNode.tsx           # Node component with highlight styling
 │   │   ├── ArchDiagram.tsx        # Main diagram renderer (ReactFlow)
 │   │   ├── FlowSidebar.tsx        # Left sidebar with flow list
-│   │   └── FlowDetail.tsx         # Bottom-right flow description card
+│   │   ├── FlowDetail.tsx         # Bottom-right flow description card
+│   │   ├── MarkdownDiagramPanel.tsx # Markdown + Mermaid viewer drawer
+│   │   └── MermaidRenderer.tsx    # Mermaid SVG renderer
 │   ├── data/
 │   │   └── flows.ts              # Node, edge, and flow definitions
+│   ├── utils/
+│   │   └── markdownMermaid.ts    # Markdown Mermaid parser + templates
 │   ├── App.tsx                    # Root component
 │   ├── index.css                  # Tailwind + ReactFlow styling
 │   └── main.tsx                   # Entry point
@@ -187,6 +233,7 @@ Hard refresh: `Cmd+Shift+R` (Mac) or `Ctrl+Shift+R` (Windows/Linux)
 | Build Tool | Vite | ^8.0 |
 | Styling | Tailwind CSS | ^4.0 |
 | Diagrams | @xyflow/react | ^12.0+ |
+| Markdown Mermaid | mermaid | ^11.x |
 
 ## Contributing
 
