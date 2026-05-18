@@ -58,17 +58,12 @@ export default function MermaidRenderer({ code }: Props) {
   const [svg, setSvg] = useState<string>('')
   const [error, setError] = useState<string>('')
   const componentId = useId().replace(/:/g, '')
+  const codeHash = hashText(code)
+  const cachedSvg = svgCache.get(codeHash)
 
   useEffect(() => {
     let disposed = false
-    const codeHash = hashText(code)
-
-    const cached = svgCache.get(codeHash)
-    if (cached) {
-      setTimeout(() => {
-        setError("")
-        setSvg(cached)
-      }, 0)
+    if (cachedSvg) {
       return () => {
         disposed = true
       }
@@ -100,15 +95,15 @@ export default function MermaidRenderer({ code }: Props) {
     return () => {
       disposed = true
     }
-  }, [code, componentId])
+  }, [cachedSvg, code, codeHash, componentId])
 
-  if (error) {
+  if (!cachedSvg && error) {
     return <div className="mdp-error">Mermaid render error: {error}</div>
   }
 
-  if (!svg) {
+  if (!cachedSvg && !svg) {
     return <div className="mdp-loading">Rendering diagram...</div>
   }
 
-  return <div className="mdp-mermaid" dangerouslySetInnerHTML={{ __html: svg }} />
+  return <div className="mdp-mermaid" dangerouslySetInnerHTML={{ __html: cachedSvg ?? svg }} />
 }
