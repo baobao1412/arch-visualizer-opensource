@@ -125,7 +125,7 @@ export default function MermaidMainCanvas({ block }: Props) {
         <div className="main-mermaid-bar">
           <div>
             <div className="main-mermaid-title">Main Interactive Canvas</div>
-            <div className="main-mermaid-subtitle">Only sequence/class are supported for line interaction.</div>
+            <div className="main-mermaid-subtitle">This block is not supported in interactive mode yet.</div>
           </div>
         </div>
         <div className="main-mermaid-note">{graph.notes[0]}</div>
@@ -138,7 +138,7 @@ export default function MermaidMainCanvas({ block }: Props) {
       <div className="main-mermaid-bar">
         <div>
           <div className="main-mermaid-title">Main Interactive Canvas: {block.title}</div>
-          <div className="main-mermaid-subtitle">Click node or edge to inspect linked line(s) from the Mermaid source.</div>
+          <div className="main-mermaid-subtitle">Click node or edge to inspect mapped line(s) from Mermaid source.</div>
         </div>
       </div>
 

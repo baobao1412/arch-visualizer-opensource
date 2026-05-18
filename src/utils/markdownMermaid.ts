@@ -3,7 +3,7 @@ import type { FlowDef } from '../data/flows'
 export interface MermaidBlock {
   id: string
   title: string
-  type: 'sequence' | 'class' | 'other'
+  type: 'sequence' | 'class' | 'flowchart' | 'other'
   code: string
 }
 
@@ -16,13 +16,7 @@ export function parseMermaidBlocks(markdown: string): MermaidBlock[] {
   while (match) {
     const code = match[1].trim()
     if (code.length > 0) {
-      const firstLine = code.split('\n').find((line) => line.trim().length > 0)?.trim() ?? ''
-      let type: MermaidBlock['type'] = 'other'
-      if (firstLine.startsWith('sequenceDiagram')) {
-        type = 'sequence'
-      } else if (firstLine.startsWith('classDiagram')) {
-        type = 'class'
-      }
+      const type = detectMermaidType(code)
 
       blocks.push({
         id: `mermaid-${index}`,
@@ -37,6 +31,28 @@ export function parseMermaidBlocks(markdown: string): MermaidBlock[] {
   }
 
   return blocks
+}
+
+function detectMermaidType(code: string): MermaidBlock['type'] {
+  const lines = code.split('\n')
+  for (const rawLine of lines) {
+    const line = rawLine.trim()
+    if (!line || line.startsWith('%%')) {
+      continue
+    }
+
+    if (line.startsWith('sequenceDiagram')) {
+      return 'sequence'
+    }
+    if (line.startsWith('classDiagram')) {
+      return 'class'
+    }
+    if (line.startsWith('flowchart') || line.startsWith('graph ')) {
+      return 'flowchart'
+    }
+  }
+
+  return 'other'
 }
 
 export function buildFlowMarkdown(flow: FlowDef | null): string {

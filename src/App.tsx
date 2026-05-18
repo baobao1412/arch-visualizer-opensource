@@ -123,7 +123,7 @@ export default function App() {
             onSelect={setActiveMainCanvasBlockId}
           />
           <ReactFlowProvider key="main-flow-provider">
-            {activeMainCanvasBlock ? <MermaidMainCanvas block={activeMainCanvasBlock} /> : null}
+            {activeMainCanvasBlock ? <MermaidMainCanvas key={activeMainCanvasBlock.id} block={activeMainCanvasBlock} /> : null}
           </ReactFlowProvider>
         </div>
       ) : (

@@ -7,7 +7,7 @@ export interface MermaidFlowEdgeData {
 }
 
 export interface MermaidFlowGraph {
-  kind: 'sequence' | 'class' | 'other'
+  kind: 'sequence' | 'class' | 'flowchart' | 'other'
   nodes: Node[]
   edges: Edge[]
   notes: string[]
@@ -38,21 +38,106 @@ interface ClassRelation {
 
 export function parseMermaidToFlow(code: string): MermaidFlowGraph {
   const lines = code.split('\n')
-  const firstLine = lines.find((line) => line.trim().length > 0)?.trim() ?? ''
+  const firstDirective = lines
+    .map((line) => line.trim())
+    .find((line) => line.length > 0 && !line.startsWith('%%')) ?? ''
 
-  if (firstLine.startsWith('sequenceDiagram')) {
+  if (firstDirective.startsWith('sequenceDiagram')) {
     return parseSequenceDiagram(lines)
   }
 
-  if (firstLine.startsWith('classDiagram')) {
+  if (firstDirective.startsWith('classDiagram')) {
     return parseClassDiagram(lines)
+  }
+
+  if (firstDirective.startsWith('flowchart') || firstDirective.startsWith('graph ')) {
+    return parseFlowchartDiagram(lines)
   }
 
   return {
     kind: 'other',
     nodes: [],
     edges: [],
-    notes: ['Only sequenceDiagram and classDiagram can be opened in main interactive canvas.'],
+    notes: ['Unsupported Mermaid syntax for interactive mode. Use sequenceDiagram, classDiagram, flowchart, or graph.'],
+  }
+}
+
+function parseFlowchartDiagram(lines: string[]): MermaidFlowGraph {
+  const nodeLabelById = new Map<string, string>()
+  const edgeRows: Array<{ source: string; target: string; label: string; lineNumber: number; lineText: string }> = []
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const rawLine = lines[i]
+    const line = rawLine.trim()
+    if (!line || line.startsWith('flowchart') || line.startsWith('graph ') || line.startsWith('subgraph') || line === 'end') {
+      continue
+    }
+
+    const edgeMatch = /^([A-Za-z0-9_]+)(?:\[[^\]]+\]|\([^)]+\)|\{[^}]+\})?\s*[-.]+>\s*(?:\|([^|]+)\|\s*)?([A-Za-z0-9_]+)(?:\[[^\]]+\]|\([^)]+\)|\{[^}]+\})?/.exec(line)
+    if (edgeMatch) {
+      const sourceId = edgeMatch[1]
+      const targetId = edgeMatch[3]
+      const label = (edgeMatch[2] ?? '').trim()
+
+      edgeRows.push({
+        source: sourceId,
+        target: targetId,
+        label,
+        lineNumber: i + 1,
+        lineText: rawLine,
+      })
+      continue
+    }
+
+    const nodeDeclRegex = /([A-Za-z0-9_]+)\s*(?:\[([^\]]+)\]|\(([^)]+)\)|\{([^}]+)\})/g
+    let nodeMatch: RegExpExecArray | null = nodeDeclRegex.exec(line)
+    while (nodeMatch) {
+      const id = nodeMatch[1]
+      const label = (nodeMatch[2] ?? nodeMatch[3] ?? nodeMatch[4] ?? id).trim()
+      if (!nodeLabelById.has(id)) {
+        nodeLabelById.set(id, label)
+      }
+      nodeMatch = nodeDeclRegex.exec(line)
+    }
+  }
+
+  for (const edge of edgeRows) {
+    if (!nodeLabelById.has(edge.source)) {
+      nodeLabelById.set(edge.source, edge.source)
+    }
+    if (!nodeLabelById.has(edge.target)) {
+      nodeLabelById.set(edge.target, edge.target)
+    }
+  }
+
+  const nodeIds = Array.from(nodeLabelById.keys())
+  const nodes: Node[] = nodeIds.map((id, index) => {
+    const col = index % 4
+    const row = Math.floor(index / 4)
+    return {
+      id,
+      position: { x: 80 + col * 260, y: 100 + row * 150 },
+      data: { label: nodeLabelById.get(id) ?? id },
+      style: defaultNodeStyle(),
+    }
+  })
+
+  const edges: Edge[] = edgeRows.map((edge, index) => ({
+    id: `flow-edge-${index + 1}`,
+    source: edge.source,
+    target: edge.target,
+    label: edge.label,
+    data: {
+      lineNumber: edge.lineNumber,
+      lineText: edge.lineText,
+    } satisfies MermaidFlowEdgeData,
+  }))
+
+  return {
+    kind: 'flowchart',
+    nodes,
+    edges,
+    notes: [],
   }
 }
 
