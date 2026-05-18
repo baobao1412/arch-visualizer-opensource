@@ -16,6 +16,216 @@ interface Props {
   block: MermaidBlock
 }
 
+// ─── Segmented toggle ────────────────────────────────────────────────────────
+function ViewToggle({
+  current,
+  onChange,
+}: {
+  current: 'exact' | 'interactive'
+  onChange: (v: 'exact' | 'interactive') => void
+}) {
+  return (
+    <div className="main-mode-toggle">
+      <button
+        type="button"
+        className={`main-mode-btn${current === 'exact' ? ' is-active' : ''}`}
+        onClick={() => onChange('exact')}
+      >
+        Exact
+      </button>
+      <button
+        type="button"
+        className={`main-mode-btn${current === 'interactive' ? ' is-active' : ''}`}
+        onClick={() => onChange('interactive')}
+      >
+        Interactive
+      </button>
+    </div>
+  )
+}
+
+// ─── Sequence lane SVG ────────────────────────────────────────────────────────
+const LANE_COL = 220
+const LANE_LEFT = 30
+const LANE_BOX_W = 178
+const LANE_BOX_H = 40
+const LANE_BOX_Y = 10
+const LANE_SIG_Y0 = LANE_BOX_Y + LANE_BOX_H + 26
+const LANE_SIG_DY = 52
+const LANE_ARROW = 7
+
+type SeqViewSignal = {
+  id: string
+  order: number
+  fromId: string
+  toId: string
+  signal: string
+  lineNumber: number
+}
+
+function truncSeq(text: string, max: number) {
+  return text.length > max ? `${text.slice(0, max)}…` : text
+}
+
+function SequenceLaneSVG({
+  participants,
+  signals,
+  selectedId,
+  selectedParticipantId,
+  onSelectSignal,
+  onSelectParticipant,
+}: {
+  participants: Array<{ id: string; label: string }>
+  signals: SeqViewSignal[]
+  selectedId: string | null
+  selectedParticipantId: string | null
+  onSelectSignal: (id: string) => void
+  onSelectParticipant: (id: string) => void
+}) {
+  const totalW = Math.max(LANE_LEFT * 2 + participants.length * LANE_COL, 520)
+  const totalH = LANE_SIG_Y0 + signals.length * LANE_SIG_DY + 50
+
+  const pcx = (id: string) => {
+    const idx = participants.findIndex((p) => p.id === id)
+    return LANE_LEFT + (idx >= 0 ? idx : 0) * LANE_COL + LANE_COL / 2
+  }
+
+  return (
+    <svg width={totalW} height={totalH} style={{ display: 'block', background: '#06101e' }}>
+      {/* Lifelines */}
+      {participants.map((p) => {
+        const x = pcx(p.id)
+        const hi = selectedParticipantId === p.id
+        return (
+          <line
+            key={`ll-${p.id}`}
+            x1={x} y1={LANE_BOX_Y + LANE_BOX_H} x2={x} y2={totalH - 20}
+            stroke={hi ? '#38bdf8' : '#1c2b3f'}
+            strokeWidth={hi ? 1.5 : 1}
+            strokeDasharray="7 5"
+          />
+        )
+      })}
+
+      {/* Participant boxes */}
+      {participants.map((p) => {
+        const x = pcx(p.id)
+        const hi = selectedParticipantId === p.id
+        return (
+          <g key={`pb-${p.id}`} onClick={() => onSelectParticipant(p.id)} style={{ cursor: 'pointer' }}>
+            <rect
+              x={x - LANE_BOX_W / 2} y={LANE_BOX_Y}
+              width={LANE_BOX_W} height={LANE_BOX_H} rx={7}
+              fill={hi ? '#0b2040' : '#111827'}
+              stroke={hi ? '#38bdf8' : '#2d3f55'}
+              strokeWidth={1.5}
+            />
+            <text
+              x={x} y={LANE_BOX_Y + LANE_BOX_H / 2 + 5}
+              textAnchor="middle"
+              fill={hi ? '#bfdbfe' : '#e5e7eb'}
+              fontSize={11} fontWeight="700"
+              style={{ userSelect: 'none' as const }}
+            >
+              {truncSeq(p.label, 20)}
+            </text>
+          </g>
+        )
+      })}
+
+      {/* Signals */}
+      {signals.map((sig, i) => {
+        const y = LANE_SIG_Y0 + i * LANE_SIG_DY
+        const fromX = pcx(sig.fromId)
+        const toX = pcx(sig.toId)
+        const active = sig.id === selectedId
+        const pFocused = selectedParticipantId
+          ? sig.fromId === selectedParticipantId || sig.toId === selectedParticipantId
+          : false
+        const focused = active || pFocused
+        const color = active ? '#facc15' : pFocused ? '#38bdf8' : '#334155'
+        const labelColor = active ? '#fde68a' : pFocused ? '#bfdbfe' : '#64748b'
+        const isSelf = sig.fromId === sig.toId
+        const cleanSig = sig.signal.replace(/^\d+\.\s*/, '')
+
+        return (
+          <g key={sig.id} onClick={() => onSelectSignal(sig.id)} style={{ cursor: 'pointer' }}>
+            {/* Row highlight */}
+            <rect
+              x={0} y={y - LANE_SIG_DY / 2 + 2} width={totalW} height={LANE_SIG_DY - 4}
+              fill={focused ? (active ? 'rgba(250,204,21,0.07)' : 'rgba(56,189,248,0.07)') : 'transparent'}
+              rx={3}
+            />
+            {/* Order badge */}
+            <text
+              x={Math.min(fromX, isSelf ? fromX : toX) - 22} y={y + 4}
+              fill={focused ? color : '#1e3a5f'}
+              fontSize={9} fontWeight="700"
+              style={{ userSelect: 'none' as const }}
+            >
+              #{sig.order}
+            </text>
+
+            {isSelf ? (
+              <>
+                <path
+                  d={`M ${fromX} ${y} L ${fromX + 54} ${y} L ${fromX + 54} ${y + 20} L ${fromX + 2} ${y + 20}`}
+                  fill="none" stroke={color} strokeWidth={focused ? 2 : 1.3}
+                />
+                <polygon
+                  points={`${fromX + 2},${y + 20 - LANE_ARROW} ${fromX + 2 + LANE_ARROW},${y + 20} ${fromX + 2},${y + 20 + LANE_ARROW}`}
+                  fill={color}
+                />
+                <text x={fromX + 60} y={y + 12}
+                  fill={labelColor} fontSize={10} fontWeight={focused ? '600' : '400'}
+                  style={{ userSelect: 'none' as const }}
+                >
+                  {truncSeq(cleanSig, 30)}
+                </text>
+              </>
+            ) : (() => {
+              const dir = toX > fromX ? 1 : -1
+              const mid = (fromX + toX) / 2
+              const maxChars = Math.max(14, Math.floor(Math.abs(toX - fromX) / 7))
+              return (
+                <>
+                  <line
+                    x1={fromX} y1={y} x2={toX - dir * (LANE_ARROW + 1)} y2={y}
+                    stroke={color} strokeWidth={focused ? 2 : 1.3}
+                  />
+                  <polygon
+                    points={`${toX},${y} ${toX - dir * LANE_ARROW},${y - LANE_ARROW} ${toX - dir * LANE_ARROW},${y + LANE_ARROW}`}
+                    fill={color}
+                  />
+                  <text x={mid} y={y - 8}
+                    textAnchor="middle"
+                    fill={labelColor} fontSize={10.5} fontWeight={focused ? '600' : '400'}
+                    style={{ userSelect: 'none' as const }}
+                  >
+                    {truncSeq(cleanSig, maxChars)}
+                  </text>
+                </>
+              )
+            })()}
+
+            {/* Line number far right */}
+            <text x={totalW - 6} y={y + 4}
+              textAnchor="end"
+              fill={focused ? color : '#1a2e45'}
+              fontSize={9}
+              style={{ userSelect: 'none' as const }}
+            >
+              L{sig.lineNumber}
+            </text>
+          </g>
+        )
+      })}
+    </svg>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 export default function MermaidMainCanvas({ block }: Props) {
   const [viewMode, setViewMode] = useState<'exact' | 'interactive'>('exact')
   const graph = useMemo(
@@ -168,116 +378,19 @@ export default function MermaidMainCanvas({ block }: Props) {
     )
   }, [graph.kind, selectedNodeId, sequenceSignals])
 
-  const sequenceCanvas = useMemo(() => {
-    if (graph.kind !== 'sequence') {
-      return { nodes: [] as Node[], edges: [] as Edge[] }
-    }
-
-    const participantX = new Map<string, number>()
-    const participantNodes: Node[] = graph.nodes.map((node, index) => {
-      const x = 80 + index * 260
-      participantX.set(node.id, x)
-      const label = (node.data as { label?: string } | undefined)?.label ?? node.id
-      const focused = selectedNodeId === node.id
-      return {
-        id: `p-${node.id}`,
-        position: { x, y: 40 },
-        data: { label },
-        draggable: false,
-        selectable: true,
-        style: {
-          border: focused ? '1px solid #facc15' : '1px solid #334155',
-          borderRadius: 8,
-          background: focused ? '#28220a' : '#111827',
-          color: '#e5e7eb',
-          padding: 8,
-          width: 180,
-          textAlign: 'center',
-          fontSize: 11,
-          fontWeight: 700,
-        },
-      }
-    })
-
-    const messageNodes: Node[] = sequenceSignals.map((signal, index) => {
-      const fromX = participantX.get(signal.fromId) ?? 80
-      const toX = participantX.get(signal.toId) ?? 80
-      const x = Math.round((fromX + toX) / 2)
-      const y = 150 + index * 72
-      const active = signal.id === selectedEdgeId
-      return {
-        id: `m-${signal.id}`,
-        position: { x, y },
-        data: {
-          label: `#${signal.order} ${signal.signal}`,
-        },
-        draggable: false,
-        selectable: true,
-        style: {
-          border: active ? '1px solid #facc15' : '1px solid #334155',
-          borderRadius: 8,
-          background: active ? '#2a2408' : '#0b1220',
-          color: active ? '#fde68a' : '#cbd5e1',
-          padding: '6px 8px',
-          width: 260,
-          textAlign: 'left',
-          fontSize: 11,
-          lineHeight: 1.35,
-          boxShadow: active ? '0 0 0 1px #facc15' : 'none',
-        },
-      }
-    })
-
-    const connectionEdges: Edge[] = sequenceSignals.flatMap((signal) => {
-      const active = signal.id === selectedEdgeId
-      const participantFocused = selectedNodeId
-        ? signal.fromId === selectedNodeId || signal.toId === selectedNodeId
-        : false
-      const focused = active || participantFocused
-      const color = focused ? '#facc15' : '#475569'
-      return [
-        {
-          id: `p2m-${signal.id}`,
-          source: `p-${signal.fromId}`,
-          target: `m-${signal.id}`,
-          style: { stroke: color, strokeWidth: focused ? 2 : 1.3, opacity: selectedEdgeId || selectedNodeId ? (focused ? 1 : 0.25) : 0.75 },
-          animated: focused,
-        },
-        {
-          id: `m2p-${signal.id}`,
-          source: `m-${signal.id}`,
-          target: `p-${signal.toId}`,
-          markerEnd: { type: MarkerType.ArrowClosed, width: 16, height: 16, color },
-          style: { stroke: color, strokeWidth: focused ? 2 : 1.3, opacity: selectedEdgeId || selectedNodeId ? (focused ? 1 : 0.25) : 0.75 },
-          animated: focused,
-        },
-      ]
-    })
-
-    return {
-      nodes: [...participantNodes, ...messageNodes],
-      edges: connectionEdges,
-    }
-  }, [graph.kind, graph.nodes, selectedEdgeId, selectedNodeId, sequenceSignals])
-
   if (viewMode === 'exact') {
     return (
       <div className="main-mermaid-shell">
         <div className="main-mermaid-bar">
           <div>
-            <div className="main-mermaid-title">Main Canvas: {block.title}</div>
-            <div className="main-mermaid-subtitle">Exact Mermaid layout (matches README Mermaid Viewer).</div>
+            <div className="main-mermaid-title">{block.title}</div>
+            <div className="main-mermaid-subtitle">
+              <span className={`main-type-badge main-type-${block.type}`}>{block.type}</span>
+              Exact Mermaid render — matches README Viewer.
+            </div>
           </div>
-          <div className="main-mermaid-actions">
-            <button type="button" className="mdp-btn mdp-open-main" onClick={() => setViewMode('exact')}>
-              Exact layout
-            </button>
-            <button type="button" className="mdp-btn" onClick={() => setViewMode('interactive')}>
-              Interactive lines
-            </button>
-          </div>
+          <ViewToggle current={viewMode} onChange={setViewMode} />
         </div>
-
         <div className="main-mermaid-exact-wrap">
           <MermaidRenderer code={block.code} />
         </div>
@@ -290,134 +403,103 @@ export default function MermaidMainCanvas({ block }: Props) {
       <div className="main-mermaid-shell">
         <div className="main-mermaid-bar">
           <div>
-            <div className="main-mermaid-title">Main Interactive Canvas</div>
-            <div className="main-mermaid-subtitle">Interactive mode is not available for this Mermaid syntax.</div>
+            <div className="main-mermaid-title">{block.title}</div>
+            <div className="main-mermaid-subtitle">Interactive mode not available for this diagram type.</div>
           </div>
-          <div className="main-mermaid-actions">
-            <button type="button" className="mdp-btn mdp-open-main" onClick={() => setViewMode('exact')}>
-              Exact layout
-            </button>
-            <button type="button" className="mdp-btn" onClick={() => setViewMode('interactive')}>
-              Interactive lines
-            </button>
-          </div>
+          <ViewToggle current={viewMode} onChange={setViewMode} />
         </div>
-        <div className="main-mermaid-note">{interactiveSupport.notes[0] ?? 'Please switch to Exact layout mode.'}</div>
+        <div className="main-mermaid-note">{interactiveSupport.notes[0] ?? 'Please switch to Exact mode.'}</div>
       </div>
     )
   }
 
   if (graph.kind === 'sequence') {
-    const selectedSignal = sequenceSignals.find((item) => item.id === selectedEdgeId) ?? null
+    const selectedSignal = sequenceSignals.find((s) => s.id === selectedEdgeId) ?? null
+    const svgParticipants = graph.nodes.map((n) => ({
+      id: n.id,
+      label: String((n.data as { label?: string }).label ?? n.id),
+    }))
+    const svgSignals: SeqViewSignal[] = sequenceSignals.map((s) => ({
+      id: s.id,
+      order: s.order,
+      fromId: s.fromId,
+      toId: s.toId,
+      signal: s.signal,
+      lineNumber: s.lineData.lineNumber,
+    }))
 
     return (
       <div className="main-mermaid-shell">
         <div className="main-mermaid-bar">
           <div>
-            <div className="main-mermaid-title">Main Interactive Canvas: {block.title}</div>
-            <div className="main-mermaid-subtitle">Signal timeline view for sequence diagrams (optimized readability).</div>
+            <div className="main-mermaid-title">{block.title}</div>
+            <div className="main-mermaid-subtitle">
+              <span className="main-type-badge main-type-sequence">sequence</span>
+              Lifeline diagram — click participant or arrow to inspect source.
+            </div>
           </div>
-          <div className="main-mermaid-actions">
-            <button type="button" className="mdp-btn" onClick={() => setViewMode('exact')}>
-              Exact layout
-            </button>
-            <button type="button" className="mdp-btn mdp-open-main" onClick={() => setViewMode('interactive')}>
-              Interactive lines
-            </button>
-          </div>
+          <ViewToggle current={viewMode} onChange={setViewMode} />
         </div>
 
-        <div className="main-seq-wrap">
-          <div className="main-seq-diagram">
-            <ReactFlow
-              nodes={sequenceCanvas.nodes}
-              edges={sequenceCanvas.edges}
-              fitView
-              fitViewOptions={{ padding: 0.16 }}
-              nodesDraggable={false}
-              nodesConnectable={false}
-              onPaneClick={() => {
-                setSelectedEdgeId(null)
-                setSelectedNodeId(null)
-              }}
-              onNodeClick={(_, node) => {
-                if (node.id.startsWith('m-')) {
-                  setSelectedEdgeId(node.id.slice(2))
-                  setSelectedNodeId(null)
-                  return
-                }
-
-                if (node.id.startsWith('p-')) {
-                  setSelectedNodeId(node.id.slice(2))
-                  setSelectedEdgeId(null)
-                }
-              }}
-              style={{ background: '#070f1d' }}
-            >
-              <Background variant={BackgroundVariant.Dots} gap={22} size={1} color="#1e293b" />
-              <Controls position="bottom-left" />
-            </ReactFlow>
+        <div className="main-seq-shell">
+          <div className="main-seq-split">
+            {/* Left: SVG lane diagram */}
+            <div className="main-seq-lane-wrap">
+              <SequenceLaneSVG
+                participants={svgParticipants}
+                signals={svgSignals}
+                selectedId={selectedEdgeId}
+                selectedParticipantId={selectedNodeId}
+                onSelectSignal={(id) => { setSelectedEdgeId(id); setSelectedNodeId(null) }}
+                onSelectParticipant={(id) => { setSelectedNodeId(id); setSelectedEdgeId(null) }}
+              />
+            </div>
+            {/* Right: signal list */}
+            <div className="main-seq-list" role="list" aria-label="Sequence signals">
+              <div className="main-seq-list-head">Signals ({sequenceSignals.length})</div>
+              {sequenceSignals.map((signal) => {
+                const active =
+                  signal.id === selectedEdgeId ||
+                  Boolean(selectedNodeId && (signal.fromId === selectedNodeId || signal.toId === selectedNodeId))
+                const cleanSig = signal.signal.replace(/^\d+\.\s*/, '')
+                return (
+                  <button
+                    key={signal.id}
+                    type="button"
+                    role="listitem"
+                    className={`main-seq-row${active ? ' is-active' : ''}`}
+                    onClick={() => { setSelectedEdgeId(signal.id); setSelectedNodeId(null) }}
+                  >
+                    <div className="main-seq-row-head">
+                      <span className="main-seq-order">#{signal.order}</span>
+                      <span className="main-seq-route">{signal.fromLabel} → {signal.toLabel}</span>
+                      <span className="main-seq-line">L{signal.lineData.lineNumber}</span>
+                    </div>
+                    <div className="main-seq-signal">{cleanSig}</div>
+                  </button>
+                )
+              })}
+            </div>
           </div>
 
-          <div className="main-seq-participants">
-            {graph.nodes.map((node) => {
-              const label = (node.data as { label?: string } | undefined)?.label ?? node.id
-              const active = selectedNodeId === node.id
-              return (
-                <div key={node.id} className={`main-seq-participant-chip ${active ? 'is-active' : ''}`}>
-                  {String(label)}
-                </div>
-              )
-            })}
+          <div className="main-mermaid-inspector">
+            {selectedSignal ? (
+              <div>
+                <strong>L{selectedSignal.lineData.lineNumber}:</strong>
+                <pre>{selectedSignal.lineData.lineText}</pre>
+              </div>
+            ) : sequenceParticipantSignals.length > 0 ? (
+              <div>
+                <strong>{selectedNodeId} — {sequenceParticipantSignals.length} signals:</strong>
+                <pre>{sequenceParticipantSignals.map((s) => `L${s.lineData.lineNumber}: ${s.lineData.lineText.trim()}`).join('\n')}</pre>
+              </div>
+            ) : (
+              <div>
+                <strong>Inspector:</strong>
+                <pre>Click a participant lifeline or signal arrow to inspect source.</pre>
+              </div>
+            )}
           </div>
-
-          <div className="main-seq-list" role="list" aria-label="Sequence signals list">
-            {sequenceSignals.map((signal) => {
-              const active =
-                signal.id === selectedEdgeId ||
-                Boolean(selectedNodeId && (signal.fromId === selectedNodeId || signal.toId === selectedNodeId))
-              return (
-                <button
-                  key={signal.id}
-                  type="button"
-                  role="listitem"
-                  className={`main-seq-row ${active ? 'is-active' : ''}`}
-                  onClick={() => {
-                    setSelectedEdgeId(signal.id)
-                    setSelectedNodeId(null)
-                  }}
-                >
-                  <span className="main-seq-order">#{signal.order}</span>
-                  <span className="main-seq-route">{signal.fromLabel} -&gt; {signal.toLabel}</span>
-                  <span className="main-seq-signal">{signal.signal}</span>
-                  <span className="main-seq-line">L{signal.lineData.lineNumber}</span>
-                </button>
-              )
-            })}
-          </div>
-        </div>
-
-        <div className="main-mermaid-inspector">
-          {selectedSignal ? (
-            <div>
-              <strong>Selected signal line {selectedSignal.lineData.lineNumber}:</strong>
-              <pre>{selectedSignal.lineData.lineText}</pre>
-            </div>
-          ) : sequenceParticipantSignals.length > 0 ? (
-            <div>
-              <strong>Participant {selectedNodeId} linked lines:</strong>
-              <pre>
-                {sequenceParticipantSignals
-                  .map((signal) => `L${signal.lineData.lineNumber}: ${signal.lineData.lineText.trim()}`)
-                  .join('\n')}
-              </pre>
-            </div>
-          ) : (
-            <div>
-              <strong>Inspector:</strong>
-              <pre>Click signal row, message node, or participant node to inspect source line relationships.</pre>
-            </div>
-          )}
         </div>
       </div>
     )
@@ -427,17 +509,13 @@ export default function MermaidMainCanvas({ block }: Props) {
     <div className="main-mermaid-shell">
       <div className="main-mermaid-bar">
         <div>
-          <div className="main-mermaid-title">Main Interactive Canvas: {block.title}</div>
-          <div className="main-mermaid-subtitle">Click node or edge to inspect mapped line(s) from Mermaid source.</div>
+          <div className="main-mermaid-title">{block.title}</div>
+          <div className="main-mermaid-subtitle">
+            <span className={`main-type-badge main-type-${block.type}`}>{block.type}</span>
+            Node graph — click node or edge to inspect source line.
+          </div>
         </div>
-        <div className="main-mermaid-actions">
-          <button type="button" className="mdp-btn" onClick={() => setViewMode('exact')}>
-            Exact layout
-          </button>
-          <button type="button" className="mdp-btn mdp-open-main" onClick={() => setViewMode('interactive')}>
-            Interactive lines
-          </button>
-        </div>
+        <ViewToggle current={viewMode} onChange={setViewMode} />
       </div>
 
       <div className="main-mermaid-canvas">
