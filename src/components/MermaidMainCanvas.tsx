@@ -13,10 +13,9 @@ import { parseMermaidToFlow, type MermaidFlowEdgeData } from '../utils/mermaidTo
 
 interface Props {
   block: MermaidBlock
-  onBack: () => void
 }
 
-export default function MermaidMainCanvas({ block, onBack }: Props) {
+export default function MermaidMainCanvas({ block }: Props) {
   const graph = useMemo(() => parseMermaidToFlow(block.code), [block.code])
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
@@ -128,9 +127,6 @@ export default function MermaidMainCanvas({ block, onBack }: Props) {
             <div className="main-mermaid-title">Main Interactive Canvas</div>
             <div className="main-mermaid-subtitle">Only sequence/class are supported for line interaction.</div>
           </div>
-          <button type="button" className="mdp-btn" onClick={onBack}>
-            Back to architecture
-          </button>
         </div>
         <div className="main-mermaid-note">{graph.notes[0]}</div>
       </div>
@@ -144,9 +140,6 @@ export default function MermaidMainCanvas({ block, onBack }: Props) {
           <div className="main-mermaid-title">Main Interactive Canvas: {block.title}</div>
           <div className="main-mermaid-subtitle">Click node or edge to inspect linked line(s) from the Mermaid source.</div>
         </div>
-        <button type="button" className="mdp-btn" onClick={onBack}>
-          Back to architecture
-        </button>
       </div>
 
       <div className="main-mermaid-canvas">

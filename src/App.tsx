@@ -3,6 +3,7 @@ import { ReactFlowProvider } from '@xyflow/react'
 import FlowSidebar from './components/FlowSidebar'
 import ArchDiagram from './components/ArchDiagram'
 import MermaidMainCanvas from './components/MermaidMainCanvas'
+import MermaidFlowSidebar from './components/MermaidFlowSidebar'
 import { FLOWS } from './data/flows'
 import type { MermaidBlock } from './utils/markdownMermaid'
 
@@ -11,14 +12,19 @@ const MarkdownDiagramPanel = lazy(() => import('./components/MarkdownDiagramPane
 export default function App() {
   const [activeFlowId, setActiveFlowId] = useState<string | null>(null)
   const [panelOpen, setPanelOpen] = useState<boolean>(false)
-  const [mainCanvasBlock, setMainCanvasBlock] = useState<MermaidBlock | null>(null)
+  const [mainCanvasBlocks, setMainCanvasBlocks] = useState<MermaidBlock[]>([])
+  const [activeMainCanvasBlockId, setActiveMainCanvasBlockId] = useState<string | null>(null)
 
   const activeFlow = useMemo(
     () => FLOWS.find((flow) => flow.id === activeFlowId) ?? null,
     [activeFlowId]
   )
 
-  const inMainCanvasMode = Boolean(mainCanvasBlock)
+  const inMainCanvasMode = mainCanvasBlocks.length > 0 && Boolean(activeMainCanvasBlockId)
+  const activeMainCanvasBlock = useMemo(
+    () => mainCanvasBlocks.find((block) => block.id === activeMainCanvasBlockId) ?? null,
+    [activeMainCanvasBlockId, mainCanvasBlocks]
+  )
 
   return (
     <div
@@ -77,7 +83,10 @@ export default function App() {
         {inMainCanvasMode ? (
           <button
             type="button"
-            onClick={() => setMainCanvasBlock(null)}
+            onClick={() => {
+              setMainCanvasBlocks([])
+              setActiveMainCanvasBlockId(null)
+            }}
             style={{
               fontSize: 11,
               color: '#fde68a',
@@ -108,16 +117,19 @@ export default function App() {
 
       {inMainCanvasMode ? (
         <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-          {mainCanvasBlock ? (
-            <ReactFlowProvider>
-              <MermaidMainCanvas block={mainCanvasBlock} onBack={() => setMainCanvasBlock(null)} />
-            </ReactFlowProvider>
-          ) : null}
+          <MermaidFlowSidebar
+            blocks={mainCanvasBlocks}
+            activeBlockId={activeMainCanvasBlockId}
+            onSelect={setActiveMainCanvasBlockId}
+          />
+          <ReactFlowProvider key="main-flow-provider">
+            {activeMainCanvasBlock ? <MermaidMainCanvas block={activeMainCanvasBlock} /> : null}
+          </ReactFlowProvider>
         </div>
       ) : (
         <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
           <FlowSidebar flows={FLOWS} activeFlow={activeFlowId} onSelect={setActiveFlowId} />
-          <ReactFlowProvider>
+          <ReactFlowProvider key="arch-flow-provider">
             <ArchDiagram activeFlowId={activeFlowId} />
           </ReactFlowProvider>
         </div>
@@ -129,8 +141,9 @@ export default function App() {
             open={panelOpen}
             onClose={() => setPanelOpen(false)}
             activeFlow={activeFlow}
-            onOpenInMainCanvas={(block) => {
-              setMainCanvasBlock(block)
+            onOpenInMainCanvas={(blocks, selectedBlockId) => {
+              setMainCanvasBlocks(blocks)
+              setActiveMainCanvasBlockId(selectedBlockId)
               setPanelOpen(false)
             }}
           />

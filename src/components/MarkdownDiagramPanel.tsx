@@ -7,7 +7,7 @@ interface Props {
   open: boolean
   onClose: () => void
   activeFlow: FlowDef | null
-  onOpenInMainCanvas: (block: MermaidBlock) => void
+  onOpenInMainCanvas: (blocks: MermaidBlock[], selectedBlockId: string) => void
 }
 
 export default function MarkdownDiagramPanel({ open, onClose, activeFlow, onOpenInMainCanvas }: Props) {
@@ -193,7 +193,7 @@ export default function MarkdownDiagramPanel({ open, onClose, activeFlow, onOpen
               <button
                 type="button"
                 className="mdp-btn mdp-open-main"
-                onClick={() => onOpenInMainCanvas(selected)}
+                onClick={() => onOpenInMainCanvas(blocks, selected.id)}
               >
                 Open selected on main canvas
               </button>

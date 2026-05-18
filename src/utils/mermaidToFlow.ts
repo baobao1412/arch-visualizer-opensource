@@ -151,7 +151,7 @@ function parseClassDiagram(lines: string[]): MermaidFlowGraph {
       classSet.add(classMatch[1])
     }
 
-    const relationMatch = /^([A-Za-z0-9_]+)\s*([*o.<|\\/-]+)\s*([A-Za-z0-9_]+)(?:\s*:\s*(.+))?$/.exec(line)
+    const relationMatch = /^([A-Za-z0-9_]+)\s*([*o.<>|\\/-]+)\s*([A-Za-z0-9_]+)(?:\s*:\s*(.+))?$/.exec(line)
     if (relationMatch) {
       const source = relationMatch[1]
       const target = relationMatch[3]
