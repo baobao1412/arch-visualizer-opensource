@@ -2,18 +2,23 @@ import { lazy, Suspense, useMemo, useState } from 'react'
 import { ReactFlowProvider } from '@xyflow/react'
 import FlowSidebar from './components/FlowSidebar'
 import ArchDiagram from './components/ArchDiagram'
+import MermaidMainCanvas from './components/MermaidMainCanvas'
 import { FLOWS } from './data/flows'
+import type { MermaidBlock } from './utils/markdownMermaid'
 
 const MarkdownDiagramPanel = lazy(() => import('./components/MarkdownDiagramPanel'))
 
 export default function App() {
   const [activeFlowId, setActiveFlowId] = useState<string | null>(null)
   const [panelOpen, setPanelOpen] = useState<boolean>(false)
+  const [mainCanvasBlock, setMainCanvasBlock] = useState<MermaidBlock | null>(null)
 
   const activeFlow = useMemo(
     () => FLOWS.find((flow) => flow.id === activeFlowId) ?? null,
     [activeFlowId]
   )
+
+  const inMainCanvasMode = Boolean(mainCanvasBlock)
 
   return (
     <div
@@ -48,7 +53,9 @@ export default function App() {
           arch-visualizer
         </span>
         <span style={{ fontSize: 11, color: '#334155' }}>-</span>
-        <span style={{ fontSize: 11, color: '#475569' }}>Architecture and Flows</span>
+        <span style={{ fontSize: 11, color: '#475569' }}>
+          {inMainCanvasMode ? 'Main Interactive Diagram' : 'Architecture and Flows'}
+        </span>
 
         <button
           type="button"
@@ -67,6 +74,24 @@ export default function App() {
           README Mermaid Viewer
         </button>
 
+        {inMainCanvasMode ? (
+          <button
+            type="button"
+            onClick={() => setMainCanvasBlock(null)}
+            style={{
+              fontSize: 11,
+              color: '#fde68a',
+              background: '#382a10',
+              border: '1px solid #7c5d1e',
+              borderRadius: 6,
+              padding: '5px 10px',
+              cursor: 'pointer',
+            }}
+          >
+            Back to architecture
+          </button>
+        ) : null}
+
         <span
           style={{
             fontSize: 10,
@@ -81,12 +106,22 @@ export default function App() {
         </span>
       </header>
 
-      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-        <FlowSidebar flows={FLOWS} activeFlow={activeFlowId} onSelect={setActiveFlowId} />
-        <ReactFlowProvider>
-          <ArchDiagram activeFlowId={activeFlowId} />
-        </ReactFlowProvider>
-      </div>
+      {inMainCanvasMode ? (
+        <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+          {mainCanvasBlock ? (
+            <ReactFlowProvider>
+              <MermaidMainCanvas block={mainCanvasBlock} onBack={() => setMainCanvasBlock(null)} />
+            </ReactFlowProvider>
+          ) : null}
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+          <FlowSidebar flows={FLOWS} activeFlow={activeFlowId} onSelect={setActiveFlowId} />
+          <ReactFlowProvider>
+            <ArchDiagram activeFlowId={activeFlowId} />
+          </ReactFlowProvider>
+        </div>
+      )}
 
       <Suspense fallback={null}>
         {panelOpen ? (
@@ -94,6 +129,10 @@ export default function App() {
             open={panelOpen}
             onClose={() => setPanelOpen(false)}
             activeFlow={activeFlow}
+            onOpenInMainCanvas={(block) => {
+              setMainCanvasBlock(block)
+              setPanelOpen(false)
+            }}
           />
         ) : null}
       </Suspense>

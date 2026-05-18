@@ -1,15 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import MermaidRenderer from './MermaidRenderer'
 import type { FlowDef } from '../data/flows'
-import { buildFlowMarkdown, parseMermaidBlocks } from '../utils/markdownMermaid'
+import { buildFlowMarkdown, parseMermaidBlocks, type MermaidBlock } from '../utils/markdownMermaid'
 
 interface Props {
   open: boolean
   onClose: () => void
   activeFlow: FlowDef | null
+  onOpenInMainCanvas: (block: MermaidBlock) => void
 }
 
-export default function MarkdownDiagramPanel({ open, onClose, activeFlow }: Props) {
+export default function MarkdownDiagramPanel({ open, onClose, activeFlow, onOpenInMainCanvas }: Props) {
   const [markdown, setMarkdown] = useState<string>(() => buildFlowMarkdown(activeFlow))
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null)
   const [loadError, setLoadError] = useState<string>('')
@@ -187,6 +188,16 @@ export default function MarkdownDiagramPanel({ open, onClose, activeFlow }: Prop
                 )
               })}
             </div>
+
+            {selected ? (
+              <button
+                type="button"
+                className="mdp-btn mdp-open-main"
+                onClick={() => onOpenInMainCanvas(selected)}
+              >
+                Open selected on main canvas
+              </button>
+            ) : null}
 
             {selected ? (
               <>

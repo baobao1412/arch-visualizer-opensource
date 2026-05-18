@@ -220,6 +220,14 @@ body {
   background: #11203a;
 }
 
+.mdp-open-main {
+  margin-top: 10px;
+  width: fit-content;
+  border-color: #4c7f42;
+  color: #d9f99d;
+  background: #1a2e12;
+}
+
 .mdp-preview-wrap {
   border: 1px solid #1e293b;
   border-radius: 8px;
@@ -286,4 +294,72 @@ body {
     margin-left: 0;
     width: 100%;
   }
+}
+
+.main-mermaid-shell {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+}
+
+.main-mermaid-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid #1e293b;
+  background: #0b1120;
+}
+
+.main-mermaid-title {
+  color: #dbeafe;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.main-mermaid-subtitle {
+  color: #93c5fd;
+  font-size: 11px;
+}
+
+.main-mermaid-canvas {
+  flex: 1;
+  min-height: 0;
+}
+
+.main-mermaid-inspector {
+  border-top: 1px solid #1e293b;
+  background: #020617;
+  color: #cbd5e1;
+  padding: 10px 14px;
+  min-height: 88px;
+}
+
+.main-mermaid-inspector strong {
+  color: #f8fafc;
+  font-size: 12px;
+}
+
+.main-mermaid-inspector pre {
+  margin: 8px 0 0;
+  background: #0b1220;
+  border: 1px solid #1e293b;
+  border-radius: 8px;
+  padding: 10px;
+  max-height: 160px;
+  overflow: auto;
+  color: #bfdbfe;
+  font-size: 11px;
+}
+
+.main-mermaid-note {
+  margin: 14px;
+  border: 1px dashed #334155;
+  background: #020617;
+  color: #94a3b8;
+  border-radius: 8px;
+  padding: 12px;
+  font-size: 12px;
 }
