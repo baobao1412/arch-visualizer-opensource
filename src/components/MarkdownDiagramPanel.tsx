@@ -13,6 +13,7 @@ export default function MarkdownDiagramPanel({ open, onClose, activeFlow }: Prop
   const [markdown, setMarkdown] = useState<string>(() => buildFlowMarkdown(activeFlow))
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null)
   const [loadError, setLoadError] = useState<string>('')
+  const [sourceUrl, setSourceUrl] = useState<string>('')
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   const blocks = useMemo(() => parseMermaidBlocks(markdown), [markdown])
@@ -61,6 +62,27 @@ export default function MarkdownDiagramPanel({ open, onClose, activeFlow }: Prop
     }
   }
 
+  async function onLoadFromUrl() {
+    const trimmedUrl = sourceUrl.trim()
+    if (!trimmedUrl) {
+      setLoadError('Please enter a Markdown URL first.')
+      return
+    }
+
+    try {
+      const response = await fetch(trimmedUrl, { cache: 'no-store' })
+      if (!response.ok) {
+        throw new Error('URL fetch failed')
+      }
+
+      const text = await response.text()
+      setLoadError('')
+      setMarkdown(text)
+    } catch {
+      setLoadError('Cannot load this URL. Try a raw .md URL (for example raw.githubusercontent.com).')
+    }
+  }
+
   if (!open) {
     return null
   }
@@ -99,6 +121,18 @@ export default function MarkdownDiagramPanel({ open, onClose, activeFlow }: Prop
 
           <button type="button" onClick={() => void onLoadProjectReadme()} className="mdp-btn">
             Load project README
+          </button>
+
+          <input
+            type="url"
+            value={sourceUrl}
+            onChange={(event) => setSourceUrl(event.target.value)}
+            className="mdp-url-input"
+            placeholder="https://raw.githubusercontent.com/.../README.md"
+          />
+
+          <button type="button" onClick={() => void onLoadFromUrl()} className="mdp-btn">
+            Load from URL
           </button>
 
           <input

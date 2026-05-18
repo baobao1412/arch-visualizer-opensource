@@ -113,6 +113,21 @@ body {
   cursor: pointer;
 }
 
+.mdp-url-input {
+  min-width: 280px;
+  flex: 1;
+  border: 1px solid #2b3a52;
+  background: #0b1324;
+  color: #dbeafe;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+.mdp-url-input::placeholder {
+  color: #64748b;
+}
+
 .mdp-close:hover,
 .mdp-btn:hover {
   border-color: #3d5a80;
