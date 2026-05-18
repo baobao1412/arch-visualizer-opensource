@@ -9,6 +9,7 @@ import {
   type Node,
 } from '@xyflow/react'
 import type { MermaidBlock } from '../utils/markdownMermaid'
+import MermaidRenderer from './MermaidRenderer'
 import { parseMermaidToFlow, type MermaidFlowEdgeData } from '../utils/mermaidToFlow'
 
 interface Props {
@@ -16,9 +17,15 @@ interface Props {
 }
 
 export default function MermaidMainCanvas({ block }: Props) {
-  const graph = useMemo(() => parseMermaidToFlow(block.code), [block.code])
+  const [viewMode, setViewMode] = useState<'exact' | 'interactive'>('exact')
+  const graph = useMemo(
+    () => (viewMode === 'interactive' ? parseMermaidToFlow(block.code) : { kind: 'other', nodes: [], edges: [], notes: [] }),
+    [block.code, viewMode]
+  )
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
+
+  const interactiveSupport = useMemo(() => parseMermaidToFlow(block.code), [block.code])
 
   const linkedNodeIds = useMemo(() => {
     const ids = new Set<string>()
@@ -119,16 +126,49 @@ export default function MermaidMainCanvas({ block }: Props) {
       .filter((item): item is MermaidFlowEdgeData => Boolean(item))
   }, [graph.edges, selectedNodeId])
 
-  if (graph.kind === 'other') {
+  if (viewMode === 'exact') {
+    return (
+      <div className="main-mermaid-shell">
+        <div className="main-mermaid-bar">
+          <div>
+            <div className="main-mermaid-title">Main Canvas: {block.title}</div>
+            <div className="main-mermaid-subtitle">Exact Mermaid layout (matches README Mermaid Viewer).</div>
+          </div>
+          <div className="main-mermaid-actions">
+            <button type="button" className="mdp-btn mdp-open-main" onClick={() => setViewMode('exact')}>
+              Exact layout
+            </button>
+            <button type="button" className="mdp-btn" onClick={() => setViewMode('interactive')}>
+              Interactive lines
+            </button>
+          </div>
+        </div>
+
+        <div className="main-mermaid-exact-wrap">
+          <MermaidRenderer code={block.code} />
+        </div>
+      </div>
+    )
+  }
+
+  if (interactiveSupport.kind === 'other') {
     return (
       <div className="main-mermaid-shell">
         <div className="main-mermaid-bar">
           <div>
             <div className="main-mermaid-title">Main Interactive Canvas</div>
-            <div className="main-mermaid-subtitle">This block is not supported in interactive mode yet.</div>
+            <div className="main-mermaid-subtitle">Interactive mode is not available for this Mermaid syntax.</div>
+          </div>
+          <div className="main-mermaid-actions">
+            <button type="button" className="mdp-btn mdp-open-main" onClick={() => setViewMode('exact')}>
+              Exact layout
+            </button>
+            <button type="button" className="mdp-btn" onClick={() => setViewMode('interactive')}>
+              Interactive lines
+            </button>
           </div>
         </div>
-        <div className="main-mermaid-note">{graph.notes[0]}</div>
+        <div className="main-mermaid-note">{interactiveSupport.notes[0] ?? 'Please switch to Exact layout mode.'}</div>
       </div>
     )
   }
@@ -139,6 +179,14 @@ export default function MermaidMainCanvas({ block }: Props) {
         <div>
           <div className="main-mermaid-title">Main Interactive Canvas: {block.title}</div>
           <div className="main-mermaid-subtitle">Click node or edge to inspect mapped line(s) from Mermaid source.</div>
+        </div>
+        <div className="main-mermaid-actions">
+          <button type="button" className="mdp-btn" onClick={() => setViewMode('exact')}>
+            Exact layout
+          </button>
+          <button type="button" className="mdp-btn mdp-open-main" onClick={() => setViewMode('interactive')}>
+            Interactive lines
+          </button>
         </div>
       </div>
 

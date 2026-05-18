@@ -324,6 +324,24 @@ body {
   font-size: 11px;
 }
 
+.main-mermaid-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.main-mermaid-exact-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 14px;
+  background: #050b16;
+}
+
+.main-mermaid-exact-wrap .mdp-mermaid {
+  min-width: 760px;
+}
+
 .main-mermaid-canvas {
   flex: 1;
   min-height: 0;
