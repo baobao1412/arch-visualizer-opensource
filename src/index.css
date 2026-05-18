@@ -134,6 +134,16 @@ body {
   font-size: 11px;
 }
 
+.mdp-load-error {
+  margin: 8px 16px 0;
+  border: 1px solid #7f1d1d;
+  background: #1f0a10;
+  color: #fecdd3;
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 12px;
+}
+
 .mdp-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;

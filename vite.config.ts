@@ -6,14 +6,5 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   build: {
     chunkSizeWarningLimit: 900,
-    rollupOptions: {
-      output: {
-        manualChunks: (id) => {
-          if (id.includes('mermaid')) {
-            return 'mermaid';
-          }
-        },
-      },
-    },
   },
 })

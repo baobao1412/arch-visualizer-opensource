@@ -1,13 +1,35 @@
 import { useEffect, useId, useState } from 'react'
-import mermaid from 'mermaid'
 
 interface Props {
   code: string
 }
 
-let mermaidInitialized = false
+interface MermaidApi {
+  initialize: (config: Record<string, unknown>) => void
+  render: (id: string, code: string) => Promise<{ svg: string }>
+}
 
-function ensureMermaidInitialized() {
+let mermaidInitialized = false
+let mermaidLoader: Promise<MermaidApi> | null = null
+const svgCache = new Map<string, string>()
+const MERMAID_CDN_URL = 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs'
+
+async function importFromUrl(url: string): Promise<unknown> {
+  return new Function('u', 'return import(/* @vite-ignore */ u)')(url) as Promise<unknown>
+}
+
+async function getMermaidApi(): Promise<MermaidApi> {
+  if (!mermaidLoader) {
+    mermaidLoader = importFromUrl(MERMAID_CDN_URL).then((module) => {
+      const typedModule = module as { default?: MermaidApi }
+      return typedModule.default ?? (module as MermaidApi)
+    })
+  }
+
+  return mermaidLoader
+}
+
+function ensureMermaidInitialized(mermaid: MermaidApi) {
   if (mermaidInitialized) {
     return
   }
@@ -39,15 +61,30 @@ export default function MermaidRenderer({ code }: Props) {
 
   useEffect(() => {
     let disposed = false
+    const codeHash = hashText(code)
+
+    const cached = svgCache.get(codeHash)
+    if (cached) {
+      setTimeout(() => {
+        setError("")
+        setSvg(cached)
+      }, 0)
+      return () => {
+        disposed = true
+      }
+    }
 
     async function renderDiagram() {
-      ensureMermaidInitialized()
+      setSvg('')
       setError('')
 
       try {
-        const renderKey = `mermaid-${componentId}-${hashText(code)}`
+        const mermaid = await getMermaidApi()
+        ensureMermaidInitialized(mermaid)
+        const renderKey = `mermaid-${componentId}-${codeHash}`
         const result = await mermaid.render(renderKey, code)
         if (!disposed) {
+          svgCache.set(codeHash, result.svg)
           setSvg(result.svg)
         }
       } catch (err) {

@@ -12,6 +12,7 @@ interface Props {
 export default function MarkdownDiagramPanel({ open, onClose, activeFlow }: Props) {
   const [markdown, setMarkdown] = useState<string>(() => buildFlowMarkdown(activeFlow))
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null)
+  const [loadError, setLoadError] = useState<string>('')
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   const blocks = useMemo(() => parseMermaidBlocks(markdown), [markdown])
@@ -36,8 +37,28 @@ export default function MarkdownDiagramPanel({ open, onClose, activeFlow }: Prop
   }, [open, onClose])
 
   async function onLoadFile(file: File) {
-    const text = await file.text()
-    setMarkdown(text)
+    try {
+      const text = await file.text()
+      setLoadError('')
+      setMarkdown(text)
+    } catch {
+      setLoadError('Unable to read selected file.')
+    }
+  }
+
+  async function onLoadProjectReadme() {
+    try {
+      const response = await fetch('/README.md', { cache: 'no-store' })
+      if (!response.ok) {
+        throw new Error('README not found')
+      }
+
+      const text = await response.text()
+      setLoadError('')
+      setMarkdown(text)
+    } catch {
+      setLoadError('Cannot load /README.md in current environment. Use "Load README .md" instead.')
+    }
   }
 
   if (!open) {
@@ -76,6 +97,10 @@ export default function MarkdownDiagramPanel({ open, onClose, activeFlow }: Prop
             Load README .md
           </button>
 
+          <button type="button" onClick={() => void onLoadProjectReadme()} className="mdp-btn">
+            Load project README
+          </button>
+
           <input
             ref={fileInputRef}
             type="file"
@@ -92,6 +117,8 @@ export default function MarkdownDiagramPanel({ open, onClose, activeFlow }: Prop
 
           <span className="mdp-count">Found {blocks.length} Mermaid block(s)</span>
         </div>
+
+        {loadError ? <div className="mdp-load-error">{loadError}</div> : null}
 
         <section className="mdp-grid">
           <div className="mdp-col mdp-col-editor">
