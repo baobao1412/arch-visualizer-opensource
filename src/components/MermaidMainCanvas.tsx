@@ -126,6 +126,38 @@ export default function MermaidMainCanvas({ block }: Props) {
       .filter((item): item is MermaidFlowEdgeData => Boolean(item))
   }, [graph.edges, selectedNodeId])
 
+  const participantLabelById = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const node of graph.nodes) {
+      const label = (node.data as { label?: string } | undefined)?.label ?? node.id
+      map.set(node.id, String(label))
+    }
+    return map
+  }, [graph.nodes])
+
+  const sequenceSignals = useMemo(() => {
+    if (graph.kind !== 'sequence') {
+      return []
+    }
+
+    return graph.edges.map((edge, index) => {
+      const lineData = (edge.data as MermaidFlowEdgeData | undefined) ?? {
+        lineNumber: index + 1,
+        lineText: edge.label ? String(edge.label) : '',
+      }
+      return {
+        id: edge.id,
+        order: index + 1,
+        fromId: edge.source,
+        toId: edge.target,
+        fromLabel: participantLabelById.get(edge.source) ?? edge.source,
+        toLabel: participantLabelById.get(edge.target) ?? edge.target,
+        signal: edge.label ? String(edge.label) : '(no label)',
+        lineData,
+      }
+    })
+  }, [graph.edges, graph.kind, participantLabelById])
+
   if (viewMode === 'exact') {
     return (
       <div className="main-mermaid-shell">
@@ -169,6 +201,79 @@ export default function MermaidMainCanvas({ block }: Props) {
           </div>
         </div>
         <div className="main-mermaid-note">{interactiveSupport.notes[0] ?? 'Please switch to Exact layout mode.'}</div>
+      </div>
+    )
+  }
+
+  if (graph.kind === 'sequence') {
+    const selectedSignal = sequenceSignals.find((item) => item.id === selectedEdgeId) ?? null
+
+    return (
+      <div className="main-mermaid-shell">
+        <div className="main-mermaid-bar">
+          <div>
+            <div className="main-mermaid-title">Main Interactive Canvas: {block.title}</div>
+            <div className="main-mermaid-subtitle">Signal timeline view for sequence diagrams (optimized readability).</div>
+          </div>
+          <div className="main-mermaid-actions">
+            <button type="button" className="mdp-btn" onClick={() => setViewMode('exact')}>
+              Exact layout
+            </button>
+            <button type="button" className="mdp-btn mdp-open-main" onClick={() => setViewMode('interactive')}>
+              Interactive lines
+            </button>
+          </div>
+        </div>
+
+        <div className="main-seq-wrap">
+          <div className="main-seq-participants">
+            {graph.nodes.map((node) => {
+              const label = (node.data as { label?: string } | undefined)?.label ?? node.id
+              return (
+                <div key={node.id} className="main-seq-participant-chip">
+                  {String(label)}
+                </div>
+              )
+            })}
+          </div>
+
+          <div className="main-seq-list" role="list" aria-label="Sequence signals list">
+            {sequenceSignals.map((signal) => {
+              const active = signal.id === selectedEdgeId
+              return (
+                <button
+                  key={signal.id}
+                  type="button"
+                  role="listitem"
+                  className={`main-seq-row ${active ? 'is-active' : ''}`}
+                  onClick={() => {
+                    setSelectedEdgeId(signal.id)
+                    setSelectedNodeId(null)
+                  }}
+                >
+                  <span className="main-seq-order">#{signal.order}</span>
+                  <span className="main-seq-route">{signal.fromLabel} -&gt; {signal.toLabel}</span>
+                  <span className="main-seq-signal">{signal.signal}</span>
+                  <span className="main-seq-line">L{signal.lineData.lineNumber}</span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        <div className="main-mermaid-inspector">
+          {selectedSignal ? (
+            <div>
+              <strong>Selected signal line {selectedSignal.lineData.lineNumber}:</strong>
+              <pre>{selectedSignal.lineData.lineText}</pre>
+            </div>
+          ) : (
+            <div>
+              <strong>Inspector:</strong>
+              <pre>Click a signal row to view exact Mermaid source line.</pre>
+            </div>
+          )}
+        </div>
       </div>
     )
   }
