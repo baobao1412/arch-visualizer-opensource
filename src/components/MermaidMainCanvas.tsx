@@ -1,10 +1,11 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   Background,
   BackgroundVariant,
   Controls,
   MarkerType,
   ReactFlow,
+  useNodesState,
   type Edge,
   type Node,
 } from '@xyflow/react'
@@ -234,8 +235,21 @@ export default function MermaidMainCanvas({ block }: Props) {
   )
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
+  const [nodes, setNodes, onNodesChange] = useNodesState(graph.nodes)
 
   const interactiveSupport = useMemo(() => parseMermaidToFlow(block.code), [block.code])
+
+  useEffect(() => {
+    setNodes((current) =>
+      graph.nodes.map((node) => {
+        const previous = current.find((item) => item.id === node.id)
+        return {
+          ...node,
+          position: previous?.position ?? node.position,
+        }
+      })
+    )
+  }, [graph.nodes, setNodes])
 
   const linkedNodeIds = useMemo(() => {
     const ids = new Set<string>()
@@ -261,10 +275,10 @@ export default function MermaidMainCanvas({ block }: Props) {
     return ids
   }, [graph.edges, selectedEdgeId, selectedNodeId])
 
-  const nodes: Node[] = useMemo(() => {
+  const styledNodes: Node[] = useMemo(() => {
     const hasSelection = Boolean(selectedNodeId || selectedEdgeId)
 
-    return graph.nodes.map((node) => {
+    return nodes.map((node) => {
       const isFocused = node.id === selectedNodeId || linkedNodeIds.has(node.id)
       return {
         ...node,
@@ -278,7 +292,7 @@ export default function MermaidMainCanvas({ block }: Props) {
         },
       }
     })
-  }, [graph.nodes, linkedNodeIds, selectedEdgeId, selectedNodeId])
+  }, [linkedNodeIds, nodes, selectedEdgeId, selectedNodeId])
 
   const edges: Edge[] = useMemo(() => {
     const hasSelection = Boolean(selectedNodeId || selectedEdgeId)
@@ -520,10 +534,12 @@ export default function MermaidMainCanvas({ block }: Props) {
 
       <div className="main-mermaid-canvas">
         <ReactFlow
-          nodes={nodes}
+          nodes={styledNodes}
           edges={edges}
+          onNodesChange={onNodesChange}
           fitView
           fitViewOptions={{ padding: 0.2 }}
+          nodesDraggable
           onPaneClick={() => {
             setSelectedNodeId(null)
             setSelectedEdgeId(null)
