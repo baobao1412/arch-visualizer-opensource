@@ -1,9 +1,10 @@
-import { useMemo, useCallback } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import {
   ReactFlow,
   Background,
   Controls,
   BackgroundVariant,
+  useNodesState,
   type Node,
   type Edge,
 } from '@xyflow/react';
@@ -22,7 +23,7 @@ export default function ArchDiagram({ activeFlowId }: Props) {
     ? (FLOWS.find((f) => f.id === activeFlowId) ?? null)
     : null;
 
-  const nodes: Node[] = useMemo(() => {
+  const baseNodes: Node[] = useMemo(() => {
     return BASE_NODES.map((node) => {
       const highlighted = activeFlow ? activeFlow.steps.includes(node.id) : false;
       const dimmed = activeFlow ? !highlighted : false;
@@ -38,6 +39,20 @@ export default function ArchDiagram({ activeFlowId }: Props) {
     });
   }, [activeFlow]);
 
+  const [nodes, setNodes, onNodesChange] = useNodesState(baseNodes);
+
+  useEffect(() => {
+    setNodes((current) =>
+      baseNodes.map((node) => {
+        const previous = current.find((item) => item.id === node.id);
+        return {
+          ...node,
+          position: previous?.position ?? node.position,
+        };
+      })
+    );
+  }, [baseNodes, setNodes]);
+
   const edges: Edge[] = useMemo(() => {
     return BASE_EDGES.map((edge) => {
       const highlighted = activeFlow ? activeFlow.edgeIds.includes(edge.id) : false;
@@ -50,7 +65,6 @@ export default function ArchDiagram({ activeFlowId }: Props) {
     });
   }, [activeFlow]);
 
-  const onNodesChange = useCallback(() => {}, []);
   const onEdgesChange = useCallback(() => {}, []);
 
   return (
@@ -96,7 +110,7 @@ export default function ArchDiagram({ activeFlowId }: Props) {
         onEdgesChange={onEdgesChange}
         fitView
         fitViewOptions={{ padding: 0.15 }}
-        nodesDraggable={false}
+        nodesDraggable
         nodesConnectable={false}
         elementsSelectable={false}
         panOnScroll
