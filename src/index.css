@@ -432,6 +432,35 @@ body {
   font-size: 12px;
 }
 
+@keyframes mainSeqDashFlow {
+  from {
+    stroke-dashoffset: 0;
+  }
+
+  to {
+    stroke-dashoffset: -28;
+  }
+}
+
+@keyframes mainSeqPulse {
+  0%,
+  100% {
+    opacity: 0.85;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+.main-seq-signal-link.is-animated {
+  animation: mainSeqDashFlow 1.4s linear infinite;
+}
+
+.main-seq-signal-arrow.is-animated {
+  animation: mainSeqPulse 1.4s ease-in-out infinite;
+}
+
 /* Sequence interactive shell */
 .main-seq-shell {
   flex: 1;

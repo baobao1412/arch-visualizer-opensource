@@ -171,11 +171,18 @@ function SequenceLaneSVG({
               <>
                 <path
                   d={`M ${fromX} ${y} L ${fromX + 54} ${y} L ${fromX + 54} ${y + 20} L ${fromX + 2} ${y + 20}`}
-                  fill="none" stroke={color} strokeWidth={focused ? 2 : 1.3}
+                  fill="none"
+                  stroke={color}
+                  strokeWidth={focused ? 2 : 1.3}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeDasharray={focused ? '8 6' : undefined}
+                  className={focused ? 'main-seq-signal-link is-animated' : 'main-seq-signal-link'}
                 />
                 <polygon
                   points={`${fromX + 2},${y + 20 - LANE_ARROW} ${fromX + 2 + LANE_ARROW},${y + 20} ${fromX + 2},${y + 20 + LANE_ARROW}`}
                   fill={color}
+                  className={focused ? 'main-seq-signal-arrow is-animated' : 'main-seq-signal-arrow'}
                 />
                 <text x={fromX + 60} y={y + 12}
                   fill={labelColor} fontSize={10} fontWeight={focused ? '600' : '400'}
@@ -192,11 +199,16 @@ function SequenceLaneSVG({
                 <>
                   <line
                     x1={fromX} y1={y} x2={toX - dir * (LANE_ARROW + 1)} y2={y}
-                    stroke={color} strokeWidth={focused ? 2 : 1.3}
+                    stroke={color}
+                    strokeWidth={focused ? 2 : 1.3}
+                    strokeLinecap="round"
+                    strokeDasharray={focused ? '8 6' : undefined}
+                    className={focused ? 'main-seq-signal-link is-animated' : 'main-seq-signal-link'}
                   />
                   <polygon
                     points={`${toX},${y} ${toX - dir * LANE_ARROW},${y - LANE_ARROW} ${toX - dir * LANE_ARROW},${y + LANE_ARROW}`}
                     fill={color}
+                    className={focused ? 'main-seq-signal-arrow is-animated' : 'main-seq-signal-arrow'}
                   />
                   <text x={mid} y={y - 8}
                     textAnchor="middle"
