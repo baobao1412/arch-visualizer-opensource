@@ -54,6 +54,12 @@ const LANE_BOX_Y = 10
 const LANE_SIG_Y0 = LANE_BOX_Y + LANE_BOX_H + 26
 const LANE_SIG_DY = 52
 const LANE_ARROW = 7
+const SEQ_LINE = '#facc15'
+const SEQ_LINE_SOFT = '#fde68a'
+const SEQ_LINE_DIM = '#7c5b00'
+const SEQ_LINE_FAINT = '#3f2d06'
+const SEQ_BG_ACTIVE = 'rgba(250, 204, 21, 0.10)'
+const SEQ_BG_PREFERRED = 'rgba(250, 204, 21, 0.06)'
 
 type SeqViewSignal = {
   id: string
@@ -101,7 +107,7 @@ function SequenceLaneSVG({
           <line
             key={`ll-${p.id}`}
             x1={x} y1={LANE_BOX_Y + LANE_BOX_H} x2={x} y2={totalH - 20}
-            stroke={hi ? '#38bdf8' : '#1c2b3f'}
+            stroke={hi ? SEQ_LINE : SEQ_LINE_FAINT}
             strokeWidth={hi ? 1.5 : 1}
             strokeDasharray="7 5"
           />
@@ -117,14 +123,14 @@ function SequenceLaneSVG({
             <rect
               x={x - LANE_BOX_W / 2} y={LANE_BOX_Y}
               width={LANE_BOX_W} height={LANE_BOX_H} rx={7}
-              fill={hi ? '#0b2040' : '#111827'}
-              stroke={hi ? '#38bdf8' : '#2d3f55'}
+              fill={hi ? 'rgba(250, 204, 21, 0.08)' : '#111827'}
+              stroke={hi ? SEQ_LINE : '#2d3f55'}
               strokeWidth={1.5}
             />
             <text
               x={x} y={LANE_BOX_Y + LANE_BOX_H / 2 + 5}
               textAnchor="middle"
-              fill={hi ? '#bfdbfe' : '#e5e7eb'}
+              fill={hi ? SEQ_LINE_SOFT : '#e5e7eb'}
               fontSize={11} fontWeight="700"
               style={{ userSelect: 'none' as const }}
             >
@@ -144,8 +150,8 @@ function SequenceLaneSVG({
           ? sig.fromId === selectedParticipantId || sig.toId === selectedParticipantId
           : false
         const focused = active || pFocused
-        const color = active ? '#facc15' : pFocused ? '#38bdf8' : '#334155'
-        const labelColor = active ? '#fde68a' : pFocused ? '#bfdbfe' : '#64748b'
+        const color = SEQ_LINE
+        const labelColor = focused ? SEQ_LINE_SOFT : SEQ_LINE_DIM
         const isSelf = sig.fromId === sig.toId
         const cleanSig = sig.signal.replace(/^\d+\.\s*/, '')
 
@@ -154,13 +160,13 @@ function SequenceLaneSVG({
             {/* Row highlight */}
             <rect
               x={0} y={y - LANE_SIG_DY / 2 + 2} width={totalW} height={LANE_SIG_DY - 4}
-              fill={focused ? (active ? 'rgba(250,204,21,0.07)' : 'rgba(56,189,248,0.07)') : 'transparent'}
+              fill={focused ? (active ? SEQ_BG_ACTIVE : SEQ_BG_PREFERRED) : 'transparent'}
               rx={3}
             />
             {/* Order badge */}
             <text
               x={Math.min(fromX, isSelf ? fromX : toX) - 22} y={y + 4}
-              fill={focused ? color : '#1e3a5f'}
+              fill={focused ? color : SEQ_LINE_FAINT}
               fontSize={9} fontWeight="700"
               style={{ userSelect: 'none' as const }}
             >
@@ -224,7 +230,7 @@ function SequenceLaneSVG({
             {/* Line number far right */}
             <text x={totalW - 6} y={y + 4}
               textAnchor="end"
-              fill={focused ? color : '#1a2e45'}
+              fill={focused ? color : SEQ_LINE_FAINT}
               fontSize={9}
               style={{ userSelect: 'none' as const }}
             >
