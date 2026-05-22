@@ -11,13 +11,14 @@ const MarkdownDiagramPanel = lazy(() => import('./components/MarkdownDiagramPane
 
 export default function App() {
   const [activeFlowId, setActiveFlowId] = useState<string | null>(null)
+  const [orderedFlows, setOrderedFlows] = useState(FLOWS)
   const [panelOpen, setPanelOpen] = useState<boolean>(false)
   const [mainCanvasBlocks, setMainCanvasBlocks] = useState<MermaidBlock[]>([])
   const [activeMainCanvasBlockId, setActiveMainCanvasBlockId] = useState<string | null>(null)
 
   const activeFlow = useMemo(
-    () => FLOWS.find((flow) => flow.id === activeFlowId) ?? null,
-    [activeFlowId]
+    () => orderedFlows.find((flow) => flow.id === activeFlowId) ?? null,
+    [activeFlowId, orderedFlows]
   )
 
   const inMainCanvasMode = mainCanvasBlocks.length > 0 && Boolean(activeMainCanvasBlockId)
@@ -121,6 +122,7 @@ export default function App() {
             blocks={mainCanvasBlocks}
             activeBlockId={activeMainCanvasBlockId}
             onSelect={setActiveMainCanvasBlockId}
+            onReorder={setMainCanvasBlocks}
           />
           <ReactFlowProvider key="main-flow-provider">
             {activeMainCanvasBlock ? <MermaidMainCanvas key={activeMainCanvasBlock.id} block={activeMainCanvasBlock} /> : null}
@@ -128,7 +130,7 @@ export default function App() {
         </div>
       ) : (
         <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-          <FlowSidebar flows={FLOWS} activeFlow={activeFlowId} onSelect={setActiveFlowId} />
+          <FlowSidebar flows={orderedFlows} activeFlow={activeFlowId} onSelect={setActiveFlowId} onReorder={setOrderedFlows} />
           <ReactFlowProvider key="arch-flow-provider">
             <ArchDiagram activeFlowId={activeFlowId} />
           </ReactFlowProvider>

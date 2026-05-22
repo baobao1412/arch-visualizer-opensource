@@ -1,12 +1,30 @@
+import { useState } from 'react';
 import type { FlowDef } from '../data/flows';
 
 interface Props {
   flows: FlowDef[];
   activeFlow: string | null;
   onSelect: (id: string | null) => void;
+  onReorder: (flows: FlowDef[]) => void;
 }
 
-export default function FlowSidebar({ flows, activeFlow, onSelect }: Props) {
+function moveFlow(flows: FlowDef[], fromId: string, toId: string) {
+  const fromIndex = flows.findIndex((flow) => flow.id === fromId)
+  const toIndex = flows.findIndex((flow) => flow.id === toId)
+
+  if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) {
+    return flows
+  }
+
+  const next = [...flows]
+  const [moved] = next.splice(fromIndex, 1)
+  next.splice(toIndex, 0, moved)
+  return next
+}
+
+export default function FlowSidebar({ flows, activeFlow, onSelect, onReorder }: Props) {
+  const [draggedFlowId, setDraggedFlowId] = useState<string | null>(null)
+
   return (
     <aside
       style={{
@@ -54,10 +72,33 @@ export default function FlowSidebar({ flows, activeFlow, onSelect }: Props) {
 
         {flows.map((flow) => {
           const active = activeFlow === flow.id;
+          const dragged = draggedFlowId === flow.id;
           return (
             <button
               key={flow.id}
               onClick={() => onSelect(active ? null : flow.id)}
+              draggable
+              onDragStart={(event) => {
+                setDraggedFlowId(flow.id)
+                event.dataTransfer.effectAllowed = 'move'
+                event.dataTransfer.setData('text/plain', flow.id)
+              }}
+              onDragEnd={() => setDraggedFlowId(null)}
+              onDragOver={(event) => {
+                event.preventDefault()
+                event.dataTransfer.dropEffect = 'move'
+              }}
+              onDrop={(event) => {
+                event.preventDefault()
+                const fromId = event.dataTransfer.getData('text/plain') || draggedFlowId
+                if (!fromId || fromId === flow.id) {
+                  setDraggedFlowId(null)
+                  return
+                }
+
+                onReorder(moveFlow(flows, fromId, flow.id))
+                setDraggedFlowId(null)
+              }}
               style={{
                 width: '100%',
                 textAlign: 'left',
@@ -65,12 +106,13 @@ export default function FlowSidebar({ flows, activeFlow, onSelect }: Props) {
                 marginBottom: 4,
                 borderRadius: 6,
                 border: `1px solid ${active ? flow.color : '#1e293b'}`,
-                background: active ? `${flow.color}12` : 'transparent',
+                background: dragged ? '#10233a' : active ? `${flow.color}12` : 'transparent',
                 color: active ? flow.color : '#94a3b8',
                 fontSize: 12,
-                cursor: 'pointer',
+                cursor: 'grab',
                 transition: 'all 0.15s',
                 lineHeight: 1.4,
+                opacity: dragged ? 0.72 : 1,
               }}
             >
               <span
@@ -85,6 +127,7 @@ export default function FlowSidebar({ flows, activeFlow, onSelect }: Props) {
                   verticalAlign: 'middle',
                 }}
               />
+              <span style={{ color: '#64748b', marginRight: 6 }}>⠿</span>
               {flow.label}
             </button>
           );
