@@ -9,26 +9,34 @@ interface TaskCardProps {
   onToggleSubtask?: (index: number) => void
 }
 
-const PRIORITY_COLORS: Record<string, string> = {
-  high: '#f44747',
-  medium: '#cca700',
-  low: '#3794ff',
+const PRIORITY_COLOR: Record<string, string> = {
+  high:   '#ef4444',
+  medium: '#f59e0b',
+  low:    '#3b82f6',
 }
 
-export function TaskCardView({ task, isDragging, onEdit, onToggleSubtask }: TaskCardProps) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging: isSortableDragging } = useSortable({
-    id: task.id,
-  })
+export function TaskCardView({ task, isDragging, onEdit }: TaskCardProps) {
+  const {
+    attributes, listeners, setNodeRef, transform, transition,
+    isDragging: isSortableDragging,
+  } = useSortable({ id: task.id })
 
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isSortableDragging ? 0.4 : 1,
-  }
+    '--priority-color': PRIORITY_COLOR[task.priority] ?? '#334155',
+  } as React.CSSProperties
 
   const isOverdue = task.deadline ? new Date(task.deadline) < new Date() : false
-  const subtasksDone = task.subtasks.filter((s) => s.done).length
+  const subtasksDone  = task.subtasks.filter((s) => s.done).length
   const subtasksTotal = task.subtasks.length
+
+  const displayId = task.id.startsWith('task-') ? `#T-${task.id.slice(5)}` : `#${task.id}`
+
+  const initials = task.assignee
+    ? task.assignee.replace('@', '').substring(0, 2).toUpperCase()
+    : null
 
   return (
     <div
@@ -39,54 +47,45 @@ export function TaskCardView({ task, isDragging, onEdit, onToggleSubtask }: Task
       {...attributes}
       {...listeners}
     >
-      <div className="task-priority-bar" style={{ backgroundColor: PRIORITY_COLORS[task.priority] }} />
-      <div className="task-content">
-        <div className="task-title">{task.title}</div>
+      <div className="task-top">
+        <span className="task-id">{displayId}</span>
+        <span className={`task-priority-chip priority-${task.priority}`}>{task.priority}</span>
+      </div>
 
-        {task.assignee ? <div className="task-assignee">{task.assignee}</div> : null}
+      <div className="task-title">{task.title}</div>
 
-        {subtasksTotal > 0 ? (
-          <div className="task-progress">
-            <div className="progress-bar">
-              <div className="progress-fill" style={{ width: `${(subtasksDone / subtasksTotal) * 100}%` }} />
-            </div>
-            <span className="progress-text">
-              {subtasksDone}/{subtasksTotal}
-            </span>
+      {task.description && (
+        <div className="task-desc">{task.description}</div>
+      )}
+
+      {subtasksTotal > 0 && (
+        <div className="task-progress">
+          <div className="progress-bar">
+            <div
+              className="progress-fill"
+              style={{ width: `${(subtasksDone / subtasksTotal) * 100}%` }}
+            />
           </div>
-        ) : null}
-
-        {subtasksTotal > 0 ? (
-          <div className="task-subtasks">
-            {task.subtasks.map((sub, i) => (
-              <label
-                key={i}
-                className={`subtask-item ${sub.done ? 'subtask-done' : ''}`}
-                onClick={(event) => {
-                  event.stopPropagation()
-                  onToggleSubtask?.(i)
-                }}
-              >
-                <input type="checkbox" checked={sub.done} readOnly className="subtask-checkbox" />
-                <span>{sub.text}</span>
-              </label>
-            ))}
-          </div>
-        ) : null}
-
-        <div className="task-meta">
-          {task.output ? (
-            <span className="task-tag brief-tag" title={task.output}>
-              brief
-            </span>
-          ) : null}
-          {task.milestone ? <span className="task-tag milestone-tag">{task.milestone}</span> : null}
-          {task.deadline ? <span className={`task-tag deadline-tag ${isOverdue ? 'overdue' : ''}`}>{task.deadline}</span> : null}
-          {task.depends && task.depends.length > 0 ? (
-            <span className="task-tag depends-tag">blocks: {task.depends.join(', ')}</span>
-          ) : null}
-          <span className={`task-tag priority-tag priority-${task.priority}`}>{task.priority}</span>
+          <span className="progress-text">{subtasksDone}/{subtasksTotal}</span>
         </div>
+      )}
+
+      <div className="task-footer">
+        <div className="task-tags">
+          {task.output && <span className="task-tag brief-tag">brief</span>}
+          {task.milestone && <span className="task-tag milestone-tag">{task.milestone}</span>}
+          {(task.depends?.length ?? 0) > 0 && (
+            <span className="task-tag depends-tag">&#8627;{task.depends!.length}</span>
+          )}
+          {task.deadline && (
+            <span className={`task-tag deadline-tag ${isOverdue ? 'overdue' : ''}`}>
+              {task.deadline}
+            </span>
+          )}
+        </div>
+        {initials && (
+          <div className="task-avatar" title={task.assignee}>{initials}</div>
+        )}
       </div>
     </div>
   )

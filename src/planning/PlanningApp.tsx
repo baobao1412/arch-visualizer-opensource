@@ -159,15 +159,26 @@ export default function PlanningApp() {
     )
   }
 
+  const totalTasks    = board.tasks.length
+  const inProgress    = board.tasks.filter((t) => t.column.toLowerCase().replace(/\s+/g, '') === 'inprogress').length
+
   return (
     <div className="planning-root">
       <div className="planning-header">
         <span className="planning-title">{board.title}</span>
+        {totalTasks > 0 && (
+          <span className="planning-task-summary">
+            {totalTasks} task{totalTasks !== 1 ? 's' : ''}
+            {inProgress > 0 && <> · <span>{inProgress} in progress</span></>}
+          </span>
+        )}
+        <div className="planning-header-spacer" />
         {filePath ? (
           <span className="planning-filepath" title={filePath}>
             {filePath.split(/[/\\]/).pop()}
           </span>
         ) : null}
+        <span className="planning-sync-dot" title="Synced" />
       </div>
 
       <KanbanBoard
