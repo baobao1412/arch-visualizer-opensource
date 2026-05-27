@@ -15,12 +15,15 @@ export default defineConfig(({ mode }) => {
         : isObsidian
           ? 'obsidian-plugin/webview'
           : 'dist',
-      // Obsidian: single bundle so the plugin can inject it without a server
+      // Obsidian: single IIFE bundle injected directly into DOM (no module context)
       ...(isObsidian && {
         rollupOptions: {
           output: {
+            format: 'iife' as const,
+            name: 'ArchViz',
             entryFileNames: 'app.js',
-            assetFileNames: (info) => info.name?.endsWith('.css') ? 'app.css' : (info.name ?? 'asset'),
+            assetFileNames: (info: { name?: string }) =>
+              info.name?.endsWith('.css') ? 'app.css' : (info.name ?? 'asset'),
           },
         },
         codeSplitting: false,

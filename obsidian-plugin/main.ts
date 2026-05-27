@@ -77,10 +77,12 @@ class ArchVisualizerView extends ItemView {
 
     // ── Mount root div ─────────────────────────────────────────────────────
     const rootEl = document.createElement('div')
-    rootEl.id = 'root'
     rootEl.style.cssText = 'width:100%;height:100%;overflow:hidden;'
     container.appendChild(rootEl)
     this.mountedRootEl = rootEl
+
+    // Tell React where to mount (must be set BEFORE the script runs)
+    ;(window as Window & { __archVizContainer?: HTMLDivElement }).__archVizContainer = rootEl
 
     // ── Inject JS ─────────────────────────────────────────────────────────
     const js = fs.readFileSync(jsFile, 'utf8')
@@ -103,6 +105,7 @@ class ArchVisualizerView extends ItemView {
     this.mountedRootEl = null
     this.bridgeReceiver = null
     delete (window as Window & { __archVizBridge?: unknown }).__archVizBridge
+    delete (window as Window & { __archVizContainer?: unknown }).__archVizContainer
   }
 
   // ── Send message into the React app ────────────────────────────────────
