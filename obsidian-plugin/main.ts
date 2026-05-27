@@ -1,4 +1,4 @@
-import { App, FileSystemAdapter, ItemView, Notice, Plugin, WorkspaceLeaf } from 'obsidian'
+import { FileSystemAdapter, ItemView, Notice, Plugin, WorkspaceLeaf } from 'obsidian'
 import * as fs from 'fs'
 import * as path from 'path'
 
@@ -20,9 +20,11 @@ type Action = { type: string } & Record<string, unknown>
 
 // ── Obsidian ItemView ──────────────────────────────────────────────────────
 class ArchVisualizerView extends ItemView {
-  private iframe: HTMLIFrameElement | null = null
   private planFilePath: string | null = null
-  private messageHandler: ((e: MessageEvent) => void) | null = null
+  private bridgeReceiver: ((msg: unknown) => void) | null = null
+  private mountedStyleEl: HTMLStyleElement | null = null
+  private mountedScriptEl: HTMLScriptElement | null = null
+  private mountedRootEl: HTMLDivElement | null = null
 
   constructor(leaf: WorkspaceLeaf, private plugin: ArchVisualizerPlugin) {
     super(leaf)
@@ -35,81 +37,103 @@ class ArchVisualizerView extends ItemView {
   async onOpen(): Promise<void> {
     const container = this.containerEl.children[1] as HTMLElement
     container.empty()
-    container.style.cssText = 'padding:0;overflow:hidden;height:100%;'
+    container.style.cssText = 'padding:0;overflow:hidden;height:100%;position:relative;'
 
     const adapter = this.app.vault.adapter
     if (!(adapter instanceof FileSystemAdapter)) {
-      container.innerHTML = this.errorHtml('Arch Visualizer requires the desktop app (FileSystemAdapter).')
+      container.innerHTML = this.errorHtml('Arch Visualizer requires the desktop app.')
       return
     }
 
     const basePath = adapter.getBasePath()
-    const webviewIndex = path.join(
-      basePath, '.obsidian', 'plugins', this.plugin.manifest.id, 'webview', 'index.html',
-    )
+    const pluginDir = path.join(basePath, '.obsidian', 'plugins', this.plugin.manifest.id)
+    const webviewDir = path.join(pluginDir, 'webview')
+    const jsFile = path.join(webviewDir, 'app.js')
+    const cssFile = path.join(webviewDir, 'app.css')
 
-    if (!fs.existsSync(webviewIndex)) {
-      container.innerHTML = this.errorHtml(
-        'Webview assets not found. Make sure to use the full release build that includes the <code>webview/</code> folder.',
-      )
+    if (!fs.existsSync(jsFile)) {
+      container.innerHTML = this.errorHtml('Webview assets not found (<code>webview/app.js</code>).')
       return
     }
 
     this.planFilePath = path.join(basePath, 'arch-plan.json')
 
-    const iframe = document.createElement('iframe')
-    iframe.style.cssText = 'width:100%;height:100%;border:none;background:#0a0a0f;display:block;'
+    // ── Install bridge on window so React app can communicate ──────────────
+    const bridge = {
+      send: (msg: unknown) => void this.handleFromApp(msg as Action),
+      setReceiver: (fn: (msg: unknown) => void) => { this.bridgeReceiver = fn },
+    };
+    (window as Window & { __archVizBridge?: typeof bridge }).__archVizBridge = bridge
 
-    // file:// path (works in Electron)
-    const fileUrl = 'file://' + (process.platform === 'win32'
-      ? '/' + webviewIndex.replace(/\\/g, '/')
-      : webviewIndex)
-    iframe.src = fileUrl
+    // ── Mount CSS ──────────────────────────────────────────────────────────
+    if (fs.existsSync(cssFile)) {
+      const css = fs.readFileSync(cssFile, 'utf8')
+      const style = document.createElement('style')
+      style.setAttribute('data-arch-viz', 'true')
+      style.textContent = css
+      document.head.appendChild(style)
+      this.mountedStyleEl = style
+    }
 
-    this.messageHandler = (e: MessageEvent) => void this.handleMessage(e, iframe)
-    window.addEventListener('message', this.messageHandler)
+    // ── Mount root div ─────────────────────────────────────────────────────
+    const rootEl = document.createElement('div')
+    rootEl.id = 'root'
+    rootEl.style.cssText = 'width:100%;height:100%;overflow:hidden;'
+    container.appendChild(rootEl)
+    this.mountedRootEl = rootEl
 
-    // Delay to allow React app to mount and register its message listener
-    iframe.onload = () => setTimeout(() => this.autoLoadPlan(iframe), 300)
+    // ── Inject JS ─────────────────────────────────────────────────────────
+    const js = fs.readFileSync(jsFile, 'utf8')
+    const script = document.createElement('script')
+    script.textContent = js
+    document.body.appendChild(script)
+    this.mountedScriptEl = script
 
-    container.appendChild(iframe)
-    this.iframe = iframe
+    // Send initial plan after React mounts
+    setTimeout(() => this.sendPlanToApp(), 400)
   }
 
   async onClose(): Promise<void> {
-    if (this.messageHandler) {
-      window.removeEventListener('message', this.messageHandler)
-      this.messageHandler = null
-    }
-    this.iframe = null
+    // Remove injected elements
+    this.mountedStyleEl?.remove()
+    this.mountedScriptEl?.remove()
+    this.mountedRootEl?.remove()
+    this.mountedStyleEl = null
+    this.mountedScriptEl = null
+    this.mountedRootEl = null
+    this.bridgeReceiver = null
+    delete (window as Window & { __archVizBridge?: unknown }).__archVizBridge
   }
 
-  // ── Helpers ──────────────────────────────────────────────────────────────
-  private autoLoadPlan(iframe: HTMLIFrameElement): void {
+  // ── Send message into the React app ────────────────────────────────────
+  private post(msg: unknown): void {
+    this.bridgeReceiver?.(msg)
+  }
+
+  private sendPlanToApp(): void {
     if (!this.planFilePath) return
     if (fs.existsSync(this.planFilePath)) {
       try {
         const board = JSON.parse(fs.readFileSync(this.planFilePath, 'utf8')) as PlanBoard
-        iframe.contentWindow?.postMessage(
-          { type: 'loadBoard', board, filePath: this.planFilePath }, '*',
-        )
-      } catch { /* silently skip malformed JSON */ }
+        this.post({ type: 'loadBoard', board, filePath: this.planFilePath })
+      } catch { /* skip malformed */ }
     } else {
-      iframe.contentWindow?.postMessage({ type: 'noFile' }, '*')
+      this.post({ type: 'noFile' })
     }
   }
 
-  private async handleMessage(event: MessageEvent, iframe: HTMLIFrameElement): Promise<void> {
-    if (event.source !== iframe.contentWindow) return
-    const msg = event.data as Action
+  // ── Handle messages FROM the React app ────────────────────────────────
+  private async handleFromApp(msg: Action): Promise<void> {
+    const adapter = this.app.vault.adapter as FileSystemAdapter
+    const basePath = adapter.getBasePath()
 
     switch (msg.type) {
       case 'ready':
-        this.autoLoadPlan(iframe)
+        this.sendPlanToApp()
         break
 
       case 'openPlanFile':
-        this.autoLoadPlan(iframe)
+        this.sendPlanToApp()
         break
 
       case 'createPlanFile': {
@@ -120,25 +144,20 @@ class ArchVisualizerView extends ItemView {
           tasks: [],
         }
         this.writeJson(this.planFilePath, board)
-        iframe.contentWindow?.postMessage(
-          { type: 'loadBoard', board, filePath: this.planFilePath }, '*',
-        )
+        this.post({ type: 'loadBoard', board, filePath: this.planFilePath })
         new Notice('arch-plan.json created in vault root')
         break
       }
 
       case 'loadBrief': {
-        const basePath = (this.app.vault.adapter as FileSystemAdapter).getBasePath()
         const brief = this.readBrief(basePath, msg.taskId as string)
-        iframe.contentWindow?.postMessage({ type: 'briefLoaded', taskId: msg.taskId, brief }, '*')
+        this.post({ type: 'briefLoaded', taskId: msg.taskId, brief })
         break
       }
 
-      case 'saveBrief': {
-        const basePath = (this.app.vault.adapter as FileSystemAdapter).getBasePath()
+      case 'saveBrief':
         this.saveBrief(basePath, msg.taskId as string, msg.brief as BriefContent)
         break
-      }
 
       default:
         if (this.planFilePath && fs.existsSync(this.planFilePath)) {
@@ -146,15 +165,16 @@ class ArchVisualizerView extends ItemView {
             const board = JSON.parse(fs.readFileSync(this.planFilePath, 'utf8')) as PlanBoard
             const updated = mutate(board, msg)
             this.writeJson(this.planFilePath, updated)
-            iframe.contentWindow?.postMessage({ type: 'boardUpdated', board: updated }, '*')
+            this.post({ type: 'boardUpdated', board: updated })
           } catch (err) {
-            iframe.contentWindow?.postMessage({ type: 'error', message: String(err) }, '*')
+            this.post({ type: 'error', message: String(err) })
           }
         }
         break
     }
   }
 
+  // ── File helpers ──────────────────────────────────────────────────────
   private writeJson(filePath: string, data: unknown): void {
     const dir = path.dirname(filePath)
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
@@ -175,9 +195,7 @@ class ArchVisualizerView extends ItemView {
 
   private errorHtml(msg: string): string {
     return `<div style="padding:24px;font-family:system-ui;background:#0a0a0f;color:#e2e8f0;height:100%;">
-      <h2 style="color:#f87171">Arch Visualizer</h2>
-      <p>${msg}</p>
-    </div>`
+      <h2 style="color:#f87171">Arch Visualizer</h2><p>${msg}</p></div>`
   }
 }
 
