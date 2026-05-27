@@ -26,23 +26,15 @@ export default function MermaidFlowSidebar({ blocks, activeBlockId, onSelect, on
   const [draggedBlockId, setDraggedBlockId] = useState<string | null>(null)
 
   return (
-    <aside
-      style={{
-        width: 280,
-        borderRight: '1px solid #1e293b',
-        background: '#0b1020',
-        display: 'flex',
-        flexDirection: 'column',
-      }}
-    >
-      <div style={{ padding: '14px 12px 10px', borderBottom: '1px solid #1e293b' }}>
-        <div style={{ fontSize: 12, fontWeight: 700, color: '#93c5fd', letterSpacing: '0.06em' }}>FLOWS</div>
-        <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>
+    <aside className="mermaid-sidebar">
+      <div className="mermaid-sidebar-header">
+        <div className="mermaid-sidebar-title">FLOWS</div>
+        <div className="mermaid-sidebar-count">
           README Mermaid selections ({blocks.length})
         </div>
       </div>
 
-      <div style={{ padding: 10, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div className="mermaid-sidebar-list">
         {blocks.map((block) => {
           const active = block.id === activeBlockId
           const dragged = block.id === draggedBlockId
@@ -69,30 +61,16 @@ export default function MermaidFlowSidebar({ blocks, activeBlockId, onSelect, on
                   setDraggedBlockId(null)
                   return
                 }
-
                 onReorder(moveBlock(blocks, fromId, block.id))
                 setDraggedBlockId(null)
               }}
-              style={{
-                textAlign: 'left',
-                border: active ? '1px solid #facc15' : '1px solid #23324a',
-                background: dragged ? '#13233a' : active ? '#2d250c' : '#0f172a',
-                color: active ? '#fde68a' : '#cbd5e1',
-                borderRadius: 8,
-                padding: '8px 10px',
-                cursor: 'pointer',
-                opacity: dragged ? 0.65 : 1,
-                transition: 'transform 0.12s, background 0.12s, opacity 0.12s',
-                transform: dragged ? 'scale(0.98)' : 'scale(1)',
-              }}
+              className={`mermaid-block-btn${active ? ' is-active' : ''}${dragged ? ' is-dragging' : ''}`}
             >
-              <div style={{ fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ color: '#64748b', fontSize: 10, flexShrink: 0 }}>⠿</span>
+              <div className="mermaid-block-title">
+                <span className="mermaid-block-drag-icon" aria-hidden="true">⠿</span>
                 <span>{block.title}</span>
               </div>
-              <div style={{ fontSize: 10, color: active ? '#fde68a' : '#7b94b5', marginTop: 3 }}>
-                {block.type} · drag to reorder
-              </div>
+              <div className="mermaid-block-meta">{block.type} · drag to reorder</div>
             </button>
           )
         })}

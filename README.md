@@ -13,6 +13,9 @@ An interactive web-based architecture diagram visualizer for system design flows
 - 🎮 **Zoom & Pan** — Native ReactFlow controls for navigation
 - 📱 **Responsive** — Works on desktop and mobile
 - 🧩 **README Mermaid Viewer** — Load Markdown/README and render Mermaid `sequenceDiagram` + `classDiagram` blocks
+- 🗂️ **Kanban Planning Board** — Full sprint planning board with task cards, subtasks, and brief notes
+- 🔌 **VS Code Extension** — Run as a VS Code panel with workspace plan file integration
+- 🪨 **Obsidian Plugin** — Run natively inside Obsidian with vault-aware plan file support
 
 ## Prerequisites
 
@@ -203,6 +206,55 @@ npm run deploy
 npm run build
 # Upload dist/ folder to AWS S3, Netlify, Firebase, etc.
 ```
+
+## VS Code Extension
+
+Build and install the VS Code extension:
+
+```bash
+npm run build:extension
+```
+
+This compiles the React webview into `extension/webview/` and bundles `extension/dist/extension.js`. To package as `.vsix`:
+
+```bash
+cd extension
+npx vsce package --no-dependencies
+```
+
+## Obsidian Plugin
+
+### Install from release (recommended)
+
+1. Download `arch-visualizer-obsidian-plugin.zip` from [Releases](https://github.com/baobao1412/arch-visualizer-opensource/releases)
+2. Extract the zip — you get an `arch-visualizer/` folder
+3. Copy that folder to `<YourVault>/.obsidian/plugins/`
+4. In Obsidian: **Settings → Community plugins → Enable "Arch Visualizer"**
+5. Click the 🗂️ icon in the ribbon or run `Open Arch Visualizer` from the Command Palette
+
+### Build from source
+
+```bash
+npm run build:obsidian
+```
+
+This builds the React webview into `obsidian-plugin/webview/` and compiles `obsidian-plugin/main.js`.
+
+To create the distributable zip manually:
+
+```bash
+npm run build:obsidian
+mkdir -p dist-obsidian/arch-visualizer
+cp obsidian-plugin/manifest.json obsidian-plugin/main.js dist-obsidian/arch-visualizer/
+cp -r obsidian-plugin/webview dist-obsidian/arch-visualizer/
+cd dist-obsidian && zip -r ../arch-visualizer-obsidian-plugin.zip arch-visualizer
+```
+
+### Vault integration
+
+- **Planning board** data is saved as `arch-plan.json` in your vault root
+- **Task briefs** are stored under `.obsidian/plugins/arch-visualizer/briefs/`
+- The plugin is desktop-only (requires Electron's Node.js APIs)
 
 ## Troubleshooting
 

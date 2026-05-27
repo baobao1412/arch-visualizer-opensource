@@ -68,34 +68,13 @@ export default function ArchDiagram({ activeFlowId }: Props) {
   const onEdgesChange = useCallback(() => {}, []);
 
   return (
-    <div style={{ flex: 1, position: 'relative' }}>
-      {/* Column headers */}
-      <div
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          zIndex: 5,
-          pointerEvents: 'none',
-          display: 'flex',
-          paddingLeft: 0,
-        }}
-      >
+    <div className="arch-canvas">
+      <div className="arch-columns-overlay">
         {COLUMNS.map((col) => (
           <div
             key={col.id}
-            style={{
-              position: 'absolute',
-              left: col.x + 20,
-              top: 12,
-              fontSize: 10,
-              fontWeight: 700,
-              letterSpacing: '0.1em',
-              color: '#334155',
-              textTransform: 'uppercase',
-              whiteSpace: 'nowrap',
-            }}
+            className="arch-column-label"
+            style={{ left: col.x + 20 }}
           >
             {col.label}
           </div>

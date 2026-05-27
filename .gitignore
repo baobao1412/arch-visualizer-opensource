@@ -22,3 +22,13 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# VS Code extension build artifacts
+extension/webview
+extension/dist
+extension/node_modules
+
+# Obsidian plugin build artifacts
+obsidian-plugin/webview
+obsidian-plugin/node_modules
+obsidian-plugin/main.js

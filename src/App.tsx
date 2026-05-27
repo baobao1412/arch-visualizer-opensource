@@ -1,11 +1,13 @@
-import { lazy, Suspense, useMemo, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { ReactFlowProvider } from '@xyflow/react'
 import FlowSidebar from './components/FlowSidebar'
 import ArchDiagram from './components/ArchDiagram'
 import MermaidMainCanvas from './components/MermaidMainCanvas'
 import MermaidFlowSidebar from './components/MermaidFlowSidebar'
+import PlanningApp from './planning/PlanningApp'
 import { FLOWS } from './data/flows'
 import type { MermaidBlock } from './utils/markdownMermaid'
+import './App.css'
 
 const MarkdownDiagramPanel = lazy(() => import('./components/MarkdownDiagramPanel'))
 
@@ -13,6 +15,7 @@ export default function App() {
   const [activeFlowId, setActiveFlowId] = useState<string | null>(null)
   const [orderedFlows, setOrderedFlows] = useState(FLOWS)
   const [panelOpen, setPanelOpen] = useState<boolean>(false)
+  const [planningMode, setPlanningMode] = useState<boolean>(false)
   const [mainCanvasBlocks, setMainCanvasBlocks] = useState<MermaidBlock[]>([])
   const [activeMainCanvasBlockId, setActiveMainCanvasBlockId] = useState<string | null>(null)
 
@@ -27,97 +30,69 @@ export default function App() {
     [activeMainCanvasBlockId, mainCanvasBlocks]
   )
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !planningMode && !panelOpen) {
+        setActiveFlowId(null)
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [planningMode, panelOpen])
+
+  const modeLabel = planningMode
+    ? 'Planning Board'
+    : inMainCanvasMode
+      ? 'Main Interactive Diagram'
+      : 'Architecture and Flows'
+
   return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        height: '100vh',
-        background: '#0a0a0f',
-      }}
-    >
-      <header
-        style={{
-          minHeight: 48,
-          borderBottom: '1px solid #1e293b',
-          display: 'flex',
-          alignItems: 'center',
-          padding: '0 20px',
-          gap: 12,
-          flexShrink: 0,
-          background: '#0c0e18',
-          flexWrap: 'wrap',
-        }}
-      >
-        <span
-          style={{
-            fontSize: 13,
-            fontWeight: 700,
-            color: '#e2e8f0',
-            letterSpacing: '-0.3px',
-          }}
-        >
-          arch-visualizer
-        </span>
-        <span style={{ fontSize: 11, color: '#334155' }}>-</span>
-        <span style={{ fontSize: 11, color: '#475569' }}>
-          {inMainCanvasMode ? 'Main Interactive Diagram' : 'Architecture and Flows'}
-        </span>
+    <div className="app-root">
+      <header className="app-header">
+        <span className="app-header-title">arch-visualizer</span>
+        <span className="app-header-sep">-</span>
+        <span className="app-header-mode">{modeLabel}</span>
 
         <button
           type="button"
-          onClick={() => setPanelOpen(true)}
-          style={{
-            marginLeft: 'auto',
-            fontSize: 11,
-            color: '#dbeafe',
-            background: '#102744',
-            border: '1px solid #1f4f80',
-            borderRadius: 6,
-            padding: '5px 10px',
-            cursor: 'pointer',
-          }}
+          className={`app-btn app-btn-ml ${planningMode ? 'app-btn-amber' : 'app-btn-blue'}`}
+          onClick={() => setPlanningMode((prev) => !prev)}
         >
-          README Mermaid Viewer
+          {planningMode ? 'Back to diagrams' : 'Planning Board'}
         </button>
 
-        {inMainCanvasMode ? (
+        {!planningMode ? (
           <button
             type="button"
+            className="app-btn app-btn-blue app-btn-right"
+            onClick={() => setPanelOpen(true)}
+          >
+            README Mermaid Viewer
+          </button>
+        ) : (
+          <span className="app-btn-right" />
+        )}
+
+        {inMainCanvasMode && !planningMode ? (
+          <button
+            type="button"
+            className="app-btn app-btn-yellow"
             onClick={() => {
               setMainCanvasBlocks([])
               setActiveMainCanvasBlockId(null)
-            }}
-            style={{
-              fontSize: 11,
-              color: '#fde68a',
-              background: '#382a10',
-              border: '1px solid #7c5d1e',
-              borderRadius: 6,
-              padding: '5px 10px',
-              cursor: 'pointer',
             }}
           >
             Back to architecture
           </button>
         ) : null}
 
-        <span
-          style={{
-            fontSize: 10,
-            color: '#1e3a5f',
-            background: '#0d1f35',
-            border: '1px solid #1e3a5f',
-            borderRadius: 4,
-            padding: '2px 8px',
-          }}
-        >
-          Smart Home IoT Platform
-        </span>
+        <span className="app-header-badge">Smart Home IoT Platform</span>
       </header>
 
-      {inMainCanvasMode ? (
-        <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+      {planningMode ? (
+        <PlanningApp />
+      ) : inMainCanvasMode ? (
+        <div className="app-content">
           <MermaidFlowSidebar
             blocks={mainCanvasBlocks}
             activeBlockId={activeMainCanvasBlockId}
@@ -129,7 +104,7 @@ export default function App() {
           </ReactFlowProvider>
         </div>
       ) : (
-        <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+        <div className="app-content">
           <FlowSidebar flows={orderedFlows} activeFlow={activeFlowId} onSelect={setActiveFlowId} onReorder={setOrderedFlows} />
           <ReactFlowProvider key="arch-flow-provider">
             <ArchDiagram activeFlowId={activeFlowId} />
@@ -138,7 +113,7 @@ export default function App() {
       )}
 
       <Suspense fallback={null}>
-        {panelOpen ? (
+        {panelOpen && !planningMode ? (
           <MarkdownDiagramPanel
             open={panelOpen}
             onClose={() => setPanelOpen(false)}

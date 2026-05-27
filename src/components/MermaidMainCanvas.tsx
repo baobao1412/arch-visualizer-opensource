@@ -247,15 +247,16 @@ function SequenceLaneSVG({
 
 export default function MermaidMainCanvas({ block }: Props) {
   const [viewMode, setViewMode] = useState<'exact' | 'interactive'>('exact')
+
+  const parsedFlow = useMemo(() => parseMermaidToFlow(block.code), [block.code])
   const graph = useMemo(
-    () => (viewMode === 'interactive' ? parseMermaidToFlow(block.code) : { kind: 'other', nodes: [], edges: [], notes: [] }),
-    [block.code, viewMode]
+    () => viewMode === 'interactive' ? parsedFlow : { kind: 'other' as const, nodes: [], edges: [], notes: [] as string[] },
+    [parsedFlow, viewMode]
   )
+
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
   const [nodes, setNodes, onNodesChange] = useNodesState(graph.nodes)
-
-  const interactiveSupport = useMemo(() => parseMermaidToFlow(block.code), [block.code])
 
   useEffect(() => {
     setNodes((current) =>
@@ -430,7 +431,7 @@ export default function MermaidMainCanvas({ block }: Props) {
     )
   }
 
-  if (interactiveSupport.kind === 'other') {
+  if (parsedFlow.kind === 'other') {
     return (
       <div className="main-mermaid-shell">
         <div className="main-mermaid-bar">
@@ -440,7 +441,7 @@ export default function MermaidMainCanvas({ block }: Props) {
           </div>
           <ViewToggle current={viewMode} onChange={setViewMode} />
         </div>
-        <div className="main-mermaid-note">{interactiveSupport.notes[0] ?? 'Please switch to Exact mode.'}</div>
+        <div className="main-mermaid-note">{parsedFlow.notes[0] ?? 'Please switch to Exact mode.'}</div>
       </div>
     )
   }

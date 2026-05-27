@@ -1,0 +1,10 @@
+{
+  "id": "arch-visualizer",
+  "name": "Arch Visualizer",
+  "version": "1.0.0",
+  "minAppVersion": "1.0.0",
+  "description": "Interactive architecture diagram visualizer with Mermaid viewer and Kanban planning board",
+  "author": "Bao Nguyen",
+  "authorUrl": "https://github.com/baobao1412",
+  "isDesktopOnly": true
+}

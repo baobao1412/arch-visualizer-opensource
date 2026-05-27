@@ -26,47 +26,21 @@ export default function FlowSidebar({ flows, activeFlow, onSelect, onReorder }: 
   const [draggedFlowId, setDraggedFlowId] = useState<string | null>(null)
 
   return (
-    <aside
-      style={{
-        width: 260,
-        background: '#0c0e18',
-        borderRight: '1px solid #1e293b',
-        display: 'flex',
-        flexDirection: 'column',
-        overflowY: 'auto',
-        flexShrink: 0,
-      }}
-    >
-      {/* Header */}
-      <div style={{ padding: '20px 16px 12px', borderBottom: '1px solid #1e293b' }}>
-        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: '#475569', textTransform: 'uppercase' }}>
-          Flows
-        </div>
-        <div style={{ fontSize: 11, color: '#334155', marginTop: 4 }}>
-          Click to highlight a path
-        </div>
+    <aside className="flow-sidebar">
+      <div className="flow-sidebar-header">
+        <div className="flow-sidebar-title">Flows</div>
+        <div className="flow-sidebar-hint">Click to highlight a path</div>
       </div>
 
-      {/* Flow list */}
-      <div style={{ padding: '8px 8px' }}>
-        {/* Clear selection */}
+      <div className="flow-sidebar-list">
         {activeFlow && (
           <button
+            type="button"
             onClick={() => onSelect(null)}
-            style={{
-              width: '100%',
-              textAlign: 'left',
-              padding: '7px 10px',
-              marginBottom: 4,
-              borderRadius: 6,
-              border: '1px solid #1e293b',
-              background: 'transparent',
-              color: '#475569',
-              fontSize: 11,
-              cursor: 'pointer',
-            }}
+            className="flow-clear-btn"
           >
-            x Clear selection
+            <span aria-hidden="true">✕</span>
+            Clear selection
           </button>
         )}
 
@@ -76,6 +50,7 @@ export default function FlowSidebar({ flows, activeFlow, onSelect, onReorder }: 
           return (
             <button
               key={flow.id}
+              type="button"
               onClick={() => onSelect(active ? null : flow.id)}
               draggable
               onDragStart={(event) => {
@@ -95,39 +70,20 @@ export default function FlowSidebar({ flows, activeFlow, onSelect, onReorder }: 
                   setDraggedFlowId(null)
                   return
                 }
-
                 onReorder(moveFlow(flows, fromId, flow.id))
                 setDraggedFlowId(null)
               }}
-              style={{
-                width: '100%',
-                textAlign: 'left',
-                padding: '10px 10px',
-                marginBottom: 4,
-                borderRadius: 6,
-                border: `1px solid ${active ? flow.color : '#1e293b'}`,
-                background: dragged ? '#10233a' : active ? `${flow.color}12` : 'transparent',
-                color: active ? flow.color : '#94a3b8',
-                fontSize: 12,
-                cursor: 'grab',
-                transition: 'all 0.15s',
-                lineHeight: 1.4,
-                opacity: dragged ? 0.72 : 1,
-              }}
+              className={`flow-item${active ? ' is-active' : ''}${dragged ? ' is-dragging' : ''}`}
+              style={active ? ({
+                '--flow-color': flow.color,
+                '--flow-color-bg': `${flow.color}12`,
+              } as React.CSSProperties) : undefined}
             >
               <span
-                style={{
-                  display: 'inline-block',
-                  width: 8,
-                  height: 8,
-                  borderRadius: '50%',
-                  background: flow.color,
-                  marginRight: 8,
-                  flexShrink: 0,
-                  verticalAlign: 'middle',
-                }}
+                className="flow-item-dot"
+                style={{ background: flow.color }}
               />
-              <span style={{ color: '#64748b', marginRight: 6 }}>⠿</span>
+              <span className="flow-item-drag-icon" aria-hidden="true">⠿</span>
               {flow.label}
             </button>
           );

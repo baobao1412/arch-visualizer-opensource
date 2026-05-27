@@ -591,3 +591,86 @@ body {
     border-bottom: 1px solid #1e293b;
   }
 }
+
+/* ── Mermaid flow sidebar ─────────────────────────────────────────────────── */
+.mermaid-sidebar {
+  width: 280px;
+  border-right: 1px solid #1e293b;
+  background: #0b1020;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+
+.mermaid-sidebar-header {
+  padding: 14px 12px 10px;
+  border-bottom: 1px solid #1e293b;
+}
+
+.mermaid-sidebar-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #93c5fd;
+  letter-spacing: 0.06em;
+}
+
+.mermaid-sidebar-count {
+  font-size: 11px;
+  color: #64748b;
+  margin-top: 4px;
+}
+
+.mermaid-sidebar-list {
+  padding: 10px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mermaid-block-btn {
+  text-align: left;
+  border: 1px solid #23324a;
+  background: #0f172a;
+  color: #cbd5e1;
+  border-radius: 8px;
+  padding: 8px 10px;
+  cursor: pointer;
+  transition: transform 0.12s, background 0.12s, opacity 0.12s;
+}
+
+.mermaid-block-btn.is-active {
+  border-color: #facc15;
+  background: #2d250c;
+  color: #fde68a;
+}
+
+.mermaid-block-btn.is-dragging {
+  opacity: 0.65;
+  transform: scale(0.98);
+  background: #13233a;
+}
+
+.mermaid-block-title {
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mermaid-block-drag-icon {
+  color: #64748b;
+  font-size: 10px;
+  flex-shrink: 0;
+}
+
+.mermaid-block-meta {
+  font-size: 10px;
+  color: #7b94b5;
+  margin-top: 3px;
+}
+
+.mermaid-block-btn.is-active .mermaid-block-meta {
+  color: #fde68a;
+}
