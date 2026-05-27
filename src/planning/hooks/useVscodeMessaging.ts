@@ -20,6 +20,15 @@ function getVscodeApi(): VscodeApi | null {
   return null
 }
 
+// Detect running inside an Obsidian iframe (not VS Code)
+function isObsidianIframe(): boolean {
+  try {
+    return window !== window.parent && !getVscodeApi()
+  } catch {
+    return false
+  }
+}
+
 export function useVscodeMessaging() {
   const handlersRef = useRef<Set<MessageHandler>>(new Set())
 
@@ -35,7 +44,11 @@ export function useVscodeMessaging() {
 
   const postMessage = useCallback((msg: unknown) => {
     const api = getVscodeApi()
-    if (api) api.postMessage(msg)
+    if (api) {
+      api.postMessage(msg)
+    } else if (isObsidianIframe()) {
+      window.parent.postMessage(msg, '*')
+    }
   }, [])
 
   const onMessage = useCallback((handler: MessageHandler) => {
@@ -45,5 +58,6 @@ export function useVscodeMessaging() {
     }
   }, [])
 
-  return { postMessage, onMessage, isVscode: Boolean(getVscodeApi()) }
+  // isVscode = true for any hosted context (VS Code or Obsidian iframe)
+  return { postMessage, onMessage, isVscode: Boolean(getVscodeApi()) || isObsidianIframe() }
 }

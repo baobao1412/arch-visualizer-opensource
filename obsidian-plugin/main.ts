@@ -69,7 +69,8 @@ class ArchVisualizerView extends ItemView {
     this.messageHandler = (e: MessageEvent) => void this.handleMessage(e, iframe)
     window.addEventListener('message', this.messageHandler)
 
-    iframe.onload = () => this.autoLoadPlan(iframe)
+    // Delay to allow React app to mount and register its message listener
+    iframe.onload = () => setTimeout(() => this.autoLoadPlan(iframe), 300)
 
     container.appendChild(iframe)
     this.iframe = iframe
