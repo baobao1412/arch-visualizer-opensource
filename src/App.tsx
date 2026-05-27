@@ -15,7 +15,10 @@ export default function App() {
   const [activeFlowId, setActiveFlowId] = useState<string | null>(null)
   const [orderedFlows, setOrderedFlows] = useState(FLOWS)
   const [panelOpen, setPanelOpen] = useState<boolean>(false)
-  const [planningMode, setPlanningMode] = useState<boolean>(false)
+  // Default to planning board when running inside Obsidian
+  const [planningMode, setPlanningMode] = useState<boolean>(
+    () => Boolean((window as Window & { __archVizBridge?: unknown }).__archVizBridge)
+  )
   const [mainCanvasBlocks, setMainCanvasBlocks] = useState<MermaidBlock[]>([])
   const [activeMainCanvasBlockId, setActiveMainCanvasBlockId] = useState<string | null>(null)
 
