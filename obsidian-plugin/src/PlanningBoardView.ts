@@ -547,11 +547,14 @@ Based on the review feedback above, please:
 
   private renderTaskCard(parent: HTMLElement, task: TaskCard) {
     const isOverdue = task.deadline && new Date(task.deadline) < new Date()
+    const isDone = task.column.toLowerCase() === 'done'
     const subtasksDone = task.subtasks.filter(s => s.done).length
     const subtasksTotal = task.subtasks.length
 
+    const priorityColor = PRIORITY_COLORS[task.priority] || '#475569'
+
     const card = parent.createDiv({ cls: 'av-task-card' })
-    card.style.setProperty('--priority-color', PRIORITY_COLORS[task.priority] || '#475569')
+    card.style.setProperty('--priority-color', priorityColor)
     card.draggable = true
 
     card.addEventListener('dragstart', (e) => {
@@ -564,7 +567,6 @@ Based on the review feedback above, please:
       card.removeClass('av-task-dragging')
     })
     card.addEventListener('click', () => void this.openEditTask(task))
-
     card.addEventListener('contextmenu', (e) => {
       e.preventDefault()
       const menu = new Menu()
@@ -584,25 +586,53 @@ Based on the review feedback above, please:
       menu.showAtMouseEvent(e)
     })
 
-    // Priority bar
+    // Left priority stripe
     const bar = card.createDiv({ cls: 'av-task-priority-bar' })
-    bar.style.background = PRIORITY_COLORS[task.priority] || '#475569'
+    bar.style.background = priorityColor
 
     const content = card.createDiv({ cls: 'av-task-content' })
+
+    // Top row: circle checkbox + title + priority flag
     const top = content.createDiv({ cls: 'av-task-top' })
-    top.createEl('span', { cls: 'av-task-id', text: task.id })
-    top.createEl('span', { cls: `av-task-tag av-priority-tag av-priority-${task.priority}`, text: task.priority })
 
-    content.createEl('div', { cls: 'av-task-title', text: task.title })
+    const check = top.createDiv({ cls: `av-task-check${isDone ? ' checked' : ''}` })
+    check.title = isDone ? 'Done' : 'Mark done'
+    check.addEventListener('click', (e) => {
+      e.stopPropagation()
+      if (!this.board) return
+      const doneCols = this.board.columns.filter(c => c.toLowerCase() === 'done')
+      const targetCol = isDone
+        ? (this.board.columns.find(c => c.toLowerCase() === 'in progress' || c.toLowerCase() === 'todo') || this.board.columns[0])
+        : (doneCols[0] || this.board.columns[this.board.columns.length - 1])
+      const colTasks = this.board.tasks.filter(t => t.column === targetCol)
+      void this.moveTask(task, targetCol, colTasks.length)
+    })
 
-    if (task.assignee) {
-      const infoRow = content.createDiv({ cls: 'av-task-info-row' })
-      const avatar = infoRow.createDiv({ cls: 'av-task-avatar' })
-      avatar.title = task.assignee
-      avatar.textContent = task.assignee.replace('@', '').charAt(0).toUpperCase()
-      infoRow.createEl('span', { cls: 'av-assignee-name', text: task.assignee })
+    top.createEl('span', { cls: 'av-task-title', text: task.title })
+
+    // Priority flag SVG
+    const flagColors: Record<string, string> = { high: '#ef4444', medium: '#f97316', low: '#3b82f6' }
+    const flagColor = flagColors[task.priority] || '#71717a'
+    const flagSvg = top.createEl('svg', { cls: 'av-task-flag', attr: { viewBox: '0 0 14 14', fill: 'none', xmlns: 'http://www.w3.org/2000/svg', title: `Priority: ${task.priority}` } })
+    flagSvg.innerHTML = `<path d="M2 2v10M2 2h8l-2 3 2 3H2" stroke="${flagColor}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>`
+
+    // Meta row: id + assignee + optional context
+    const hasMetaRow = task.assignee || task.id
+    if (hasMetaRow) {
+      const metaRow = content.createDiv({ cls: 'av-task-meta-row' })
+      metaRow.createEl('span', { cls: 'av-task-id', text: task.id })
+      if (task.assignee) {
+        const avatar = metaRow.createDiv({ cls: 'av-task-avatar' })
+        avatar.title = task.assignee
+        avatar.textContent = task.assignee.replace('@', '').charAt(0).toUpperCase()
+        metaRow.createEl('span', { cls: 'av-assignee-name', text: task.assignee })
+      }
+      if (task.deadline) {
+        metaRow.createEl('span', { cls: `av-task-context${isOverdue ? ' av-overdue' : ''}`, text: isOverdue ? `⚠ ${task.deadline}` : task.deadline })
+      }
     }
 
+    // Subtask progress bar
     if (subtasksTotal > 0) {
       const progress = content.createDiv({ cls: 'av-task-progress' })
       const barEl = progress.createDiv({ cls: 'av-progress-bar' })
@@ -611,14 +641,15 @@ Based on the review feedback above, please:
       progress.createEl('span', { cls: 'av-progress-text', text: `${subtasksDone}/${subtasksTotal}` })
     }
 
-    const meta = content.createDiv({ cls: 'av-task-meta' })
-    if (task.output) meta.createEl('span', { cls: 'av-task-tag av-brief-tag', text: 'brief' })
-    if (task.milestone) meta.createEl('span', { cls: 'av-task-tag av-milestone-tag', text: task.milestone })
-    if (task.deadline) {
-      meta.createEl('span', { cls: `av-task-tag av-deadline-tag${isOverdue ? ' av-overdue' : ''}`, text: task.deadline })
+    // Tag chips: brief, milestone, depends, comments
+    const hasChips = task.output || task.milestone || task.depends?.length || task.comments?.length
+    if (hasChips) {
+      const meta = content.createDiv({ cls: 'av-task-meta' })
+      if (task.output) meta.createEl('span', { cls: 'av-task-tag av-brief-tag', text: '📄 brief' })
+      if (task.milestone) meta.createEl('span', { cls: 'av-task-tag av-milestone-tag', text: task.milestone })
+      if (task.depends?.length) meta.createEl('span', { cls: 'av-task-tag av-depends-tag', text: `↳ ${task.depends.length} dep` })
+      if (task.comments?.length) meta.createEl('span', { cls: 'av-task-tag av-comments-tag', text: `💬 ${task.comments.length}` })
     }
-    if (task.depends?.length) meta.createEl('span', { cls: 'av-task-tag av-depends-tag', text: `↳${task.depends.length}` })
-    if (task.comments?.length) meta.createEl('span', { cls: 'av-task-tag av-comments-tag', text: `💬${task.comments.length}` })
   }
 
   private getDropIndex(taskList: HTMLElement, mouseY: number, draggedId: string, column: string): number {
