@@ -901,3 +901,124 @@
     align-items: flex-end;
   }
 }
+
+/* ─── Review Tab ─────────────────────────────────────────────────────────── */
+.review-input-section {
+  margin-bottom: 12px;
+}
+
+.review-type-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.review-type-row label {
+  font-size: 11px;
+  color: var(--text-muted, rgba(255,255,255,0.5));
+  font-weight: 600;
+}
+
+.review-type-select,
+.review-author-input {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 5px;
+  color: inherit;
+  font-size: 11px;
+  padding: 3px 8px;
+}
+
+.review-textarea {
+  width: 100%;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 6px;
+  color: inherit;
+  font-size: 12px;
+  padding: 7px 9px;
+  resize: vertical;
+  font-family: inherit;
+  margin-bottom: 8px;
+  box-sizing: border-box;
+}
+
+.review-textarea:focus {
+  outline: none;
+  border-color: #42a5f5;
+}
+
+.review-add-btn {
+  font-size: 11px;
+  padding: 5px 12px;
+}
+
+.review-separator {
+  border: none;
+  border-top: 1px solid rgba(255,255,255,0.08);
+  margin: 12px 0;
+}
+
+.review-empty {
+  font-size: 11px;
+  color: rgba(255,255,255,0.3);
+  text-align: center;
+  padding: 16px;
+}
+
+.review-comments-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.review-comment {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-left: 3px solid rgba(255,255,255,0.2);
+  border-radius: 6px;
+  padding: 8px 10px;
+  position: relative;
+}
+
+.review-type-review { border-left-color: #3b82f6; }
+.review-type-rework { border-left-color: #f59e0b; }
+.review-type-note { border-left-color: #475569; }
+
+.review-comment-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 5px;
+}
+
+.review-comment-author {
+  font-size: 11px;
+  font-weight: 600;
+  flex: 1;
+}
+
+.review-comment-time {
+  font-size: 10px;
+  color: rgba(255,255,255,0.3);
+}
+
+.review-comment-delete {
+  background: transparent;
+  border: none;
+  color: rgba(255,255,255,0.3);
+  cursor: pointer;
+  font-size: 16px;
+  padding: 0;
+  line-height: 1;
+}
+.review-comment-delete:hover { color: #ef5350; }
+
+.review-comment-text {
+  font-size: 11px;
+  color: rgba(255,255,255,0.6);
+  margin: 0;
+  line-height: 1.5;
+}

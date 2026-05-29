@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { BriefContent, Subtask, TaskCard } from '../types'
+import type { BriefContent, Subtask, TaskCard, TaskComment } from '../types'
 
 interface TaskFormProps {
   task: TaskCard | null
@@ -65,7 +65,7 @@ export function TaskForm({
   onDelete,
   onClose,
 }: TaskFormProps) {
-  const [activeTab, setActiveTab] = useState<'task' | 'brief' | 'subtasks'>('task')
+  const [activeTab, setActiveTab] = useState<'task' | 'brief' | 'subtasks' | 'review'>('task')
 
   const [title,       setTitle]       = useState(task?.title       || '')
   const [description, setDescription] = useState(task?.description || '')
@@ -77,6 +77,11 @@ export function TaskForm({
   const [depends,     setDepends]     = useState(task?.depends?.join(', ') || '')
   const [subtasks,    setSubtasks]    = useState<Subtask[]>(task?.subtasks || [])
   const [newSubtask,  setNewSubtask]  = useState('')
+
+  const [comments,         setComments]         = useState<TaskComment[]>(task?.comments || [])
+  const [newCommentText,   setNewCommentText]   = useState('')
+  const [newCommentType,   setNewCommentType]   = useState<TaskComment['type']>('review')
+  const [newCommentAuthor, setNewCommentAuthor] = useState(task?.assignee?.replace('@', '') || '')
 
   const [briefContext,            setBriefContext]            = useState(brief?.context            || '')
   const [briefExpectedOutput,     setBriefExpectedOutput]     = useState(brief?.expectedOutput     || '')
@@ -138,6 +143,7 @@ export function TaskForm({
         assignee:    assignee.trim()   || undefined,
         depends:     dependsList,
         subtasks,
+        comments:    comments.length > 0 ? comments : undefined,
       },
       briefData,
     )
@@ -147,6 +153,18 @@ export function TaskForm({
     if (!newSubtask.trim()) return
     setSubtasks([...subtasks, { text: newSubtask.trim(), done: false }])
     setNewSubtask('')
+  }
+
+  const addComment = () => {
+    if (!newCommentText.trim()) return
+    const comment: TaskComment = {
+      author: newCommentAuthor.trim() || 'Anonymous',
+      text: newCommentText.trim(),
+      timestamp: new Date().toISOString(),
+      type: newCommentType,
+    }
+    setComments([...comments, comment])
+    setNewCommentText('')
   }
 
   const handleCopyPrompt = () => {
@@ -239,6 +257,13 @@ export function TaskForm({
                 {subtasks.length}
               </span>
             )}
+          </button>
+          <button
+            type="button"
+            className={`detail-tab ${activeTab === 'review' ? 'detail-tab-active' : ''}`}
+            onClick={() => setActiveTab('review')}
+          >
+            💬 Review {comments.length > 0 && <span className="detail-tab-dot" />}
           </button>
         </div>
 
@@ -492,6 +517,72 @@ export function TaskForm({
                 </button>
               </div>
             </>
+          )}
+
+          {/* REVIEW TAB */}
+          {activeTab === 'review' && (
+            <div className="form-body">
+              <div className="review-input-section">
+                <div className="review-type-row">
+                  <label>Type:</label>
+                  <select
+                    value={newCommentType}
+                    onChange={e => setNewCommentType(e.target.value as TaskComment['type'])}
+                    className="review-type-select"
+                  >
+                    <option value="review">🔍 Review</option>
+                    <option value="note">📝 Note</option>
+                    <option value="rework">🔄 Rework</option>
+                  </select>
+                  <label>Author:</label>
+                  <input
+                    type="text"
+                    value={newCommentAuthor}
+                    onChange={e => setNewCommentAuthor(e.target.value)}
+                    placeholder="Your name"
+                    className="review-author-input"
+                  />
+                </div>
+                <textarea
+                  value={newCommentText}
+                  onChange={e => setNewCommentText(e.target.value)}
+                  placeholder="Write your review comment..."
+                  rows={3}
+                  className="review-textarea"
+                />
+                <button type="button" className="btn-primary review-add-btn" onClick={addComment}>
+                  + Add Comment
+                </button>
+              </div>
+
+              <hr className="review-separator" />
+
+              <div className="review-comments-list">
+                {comments.length === 0 && (
+                  <div className="review-empty">No comments yet. Add review feedback above.</div>
+                )}
+                {[...comments].reverse().map((c, i) => {
+                  const origIdx = comments.length - 1 - i
+                  const typeEmoji = c.type === 'review' ? '🔍' : c.type === 'rework' ? '🔄' : '📝'
+                  const date = new Date(c.timestamp)
+                  const timeStr = `${date.toLocaleDateString()} ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                  return (
+                    <div key={origIdx} className={`review-comment review-type-${c.type}`}>
+                      <div className="review-comment-header">
+                        <span className="review-comment-author">{typeEmoji} {c.author}</span>
+                        <span className="review-comment-time">{timeStr}</span>
+                        <button
+                          type="button"
+                          className="review-comment-delete"
+                          onClick={() => setComments(comments.filter((_, idx) => idx !== origIdx))}
+                        >×</button>
+                      </div>
+                      <p className="review-comment-text">{c.text}</p>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
           )}
         </div>
 

@@ -16,7 +16,6 @@ export interface BriefContent {
   acceptanceCriteria: string
   technicalNotes: string
   rulesFormat: string
-  links?: string[]
 }
 
 export interface TaskCard {

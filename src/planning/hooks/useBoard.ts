@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import type { PlanBoard, TaskCard } from '../types'
+import type { PlanBoard, TaskCard, TaskComment } from '../types'
 
 type IncomingMessage =
   | { type: 'loadBoard'; board: PlanBoard; filePath: string }
@@ -94,7 +94,21 @@ export function useBoard(onMessage: OnMessage, postMessage: PostMessage, isVscod
         case 'moveTask': {
           const task = prev.tasks.find((t) => t.id === action.taskId)
           if (!task) return prev
+          // Rework detection
+          const fromLower = task.column.toLowerCase()
+          const toLower = action.toColumn.toLowerCase()
+          const isRework = (fromLower === 'review' || fromLower === 'done') &&
+            (toLower === 'in progress' || toLower === 'todo')
           const moved = { ...task, column: action.toColumn }
+          if (isRework) {
+            const reworkComment: TaskComment = {
+              author: 'System',
+              text: `Task moved from "${task.column}" back to "${action.toColumn}" for rework.`,
+              timestamp: new Date().toISOString(),
+              type: 'rework',
+            }
+            moved.comments = [...(moved.comments || []), reworkComment]
+          }
           const columnTasks = prev.tasks.filter((t) => t.column === action.toColumn && t.id !== action.taskId)
           const others = prev.tasks.filter((t) => t.column !== action.toColumn && t.id !== action.taskId)
           columnTasks.splice(action.insertIndex, 0, moved)

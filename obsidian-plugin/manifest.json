@@ -1,10 +1,9 @@
 {
   "id": "arch-visualizer",
-  "name": "Arch Visualizer",
+  "name": "Arch Visualizer — Planning Board",
   "version": "1.0.0",
   "minAppVersion": "1.0.0",
-  "description": "Interactive architecture diagram visualizer with Mermaid viewer and Kanban planning board",
+  "description": "Kanban planning board with .plan.md files. Drag-and-drop tasks, briefs, subtasks. Local-only, offline, no cloud.",
   "author": "Bao Nguyen",
-  "authorUrl": "https://github.com/baobao1412",
-  "isDesktopOnly": true
+  "isDesktopOnly": false
 }
