@@ -3,7 +3,7 @@
 
 body {
   margin: 0;
-  background: #0a0a0f;
+  background: #060810;
   color: #e2e8f0;
   font-family: 'Inter', system-ui, sans-serif;
   height: 100%;
@@ -21,11 +21,11 @@ html {
 }
 
 .react-flow__background {
-  background: #0a0a0f;
+  background: #060810;
 }
 
 .react-flow__edge-path {
-  stroke: #2d3748;
+  stroke: rgba(30,41,59,0.7);
   stroke-width: 1.5;
   transition: stroke 0.2s, stroke-width 0.2s, opacity 0.2s;
 }
@@ -33,32 +33,39 @@ html {
 .react-flow__edge.highlighted .react-flow__edge-path {
   stroke: #f6c90e;
   stroke-width: 2.5;
-  filter: drop-shadow(0 0 4px rgba(246, 201, 14, 0.5));
+  filter: drop-shadow(0 0 6px rgba(246, 201, 14, 0.6));
 }
 
 .react-flow__edge.dimmed .react-flow__edge-path {
-  stroke: #1a2030;
-  opacity: 0.3;
+  stroke: #0d1420;
+  opacity: 0.2;
 }
 
 .react-flow__controls {
-  border: 1px solid #1e293b;
-  background: #0f1420;
+  border: 1px solid rgba(255,255,255,0.06);
+  background: rgba(8,10,22,0.8);
+  backdrop-filter: blur(12px);
+  border-radius: 8px;
+  overflow: hidden;
 }
 
 .react-flow__controls-button {
-  background: #0f1420;
-  border-bottom: 1px solid #1e293b;
-  fill: #64748b;
+  background: transparent;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  fill: rgba(100,116,139,0.7);
+  transition: fill 0.15s, background 0.15s;
 }
 
 .react-flow__controls-button:hover {
-  background: #1e293b;
+  background: rgba(255,255,255,0.05);
+  fill: #94a3b8;
 }
 
 .react-flow__minimap {
-  background: #0f1420;
-  border: 1px solid #1e293b;
+  background: rgba(8,10,22,0.8);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 8px;
 }
 
 .mdp-overlay {

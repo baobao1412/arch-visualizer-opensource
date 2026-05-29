@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { KanbanBoard } from './components/KanbanBoard'
 import { EmptyState } from './components/EmptyState'
 import { TaskForm } from './components/TaskForm'
+import DependencyGraph from './components/DependencyGraph'
 import { useBoard } from './hooks/useBoard'
 import { useVscodeMessaging } from './hooks/useVscodeMessaging'
 import type { BriefContent, TaskCard } from './types'
@@ -19,6 +20,7 @@ export default function PlanningApp() {
   const [currentBrief, setCurrentBrief] = useState<BriefContent | null>(null)
   const [briefLoading, setBriefLoading] = useState(false)
   const [localBriefs, setLocalBriefs] = useState<BriefMap>({})
+  const [graphMode, setGraphMode] = useState(false)
 
   useEffect(() => {
     if (!isVscode) {
@@ -173,6 +175,13 @@ export default function PlanningApp() {
           </span>
         )}
         <div className="planning-header-spacer" />
+        <button
+          className="planning-view-toggle"
+          onClick={() => setGraphMode(m => !m)}
+          title={graphMode ? 'Switch to Board view' : 'Switch to Dependency Graph'}
+        >
+          {graphMode ? '📋 Board' : '📊 Graph'}
+        </button>
         {filePath ? (
           <span className="planning-filepath" title={filePath}>
             {filePath.split(/[/\\]/).pop()}
@@ -181,14 +190,18 @@ export default function PlanningApp() {
         <span className="planning-sync-dot" title="Synced" />
       </div>
 
-      <KanbanBoard
-        board={board}
-        onMoveTask={(taskId, toColumn, insertIndex) => dispatch({ type: 'moveTask', taskId, toColumn, insertIndex })}
-        onReorderTask={(taskId, insertIndex) => dispatch({ type: 'reorderTask', taskId, insertIndex })}
-        onEditTask={handleEditTask}
-        onCreateTask={handleCreateTask}
-        onToggleSubtask={handleToggleSubtask}
-      />
+      {graphMode ? (
+        <DependencyGraph board={board} onEditTask={handleEditTask} />
+      ) : (
+        <KanbanBoard
+          board={board}
+          onMoveTask={(taskId, toColumn, insertIndex) => dispatch({ type: 'moveTask', taskId, toColumn, insertIndex })}
+          onReorderTask={(taskId, insertIndex) => dispatch({ type: 'reorderTask', taskId, insertIndex })}
+          onEditTask={handleEditTask}
+          onCreateTask={handleCreateTask}
+          onToggleSubtask={handleToggleSubtask}
+        />
+      )}
 
       {isCreating || editingTask ? (
         <TaskForm
