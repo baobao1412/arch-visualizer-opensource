@@ -9,6 +9,7 @@ export class TaskModal extends Modal {
   private onDelete?: (taskId: string) => void
   private onLoadBrief?: (taskId: string) => Promise<BriefContent>
   private onSaveBrief?: (taskId: string, brief: BriefContent) => Promise<void>
+  private onTriggerRework?: (task: TaskCard) => Promise<string | void>
   private briefContent: BriefContent | null = null
 
   constructor(
@@ -20,6 +21,7 @@ export class TaskModal extends Modal {
     onDelete?: (taskId: string) => void,
     onLoadBrief?: (taskId: string) => Promise<BriefContent>,
     onSaveBrief?: (taskId: string, brief: BriefContent) => Promise<void>,
+    onTriggerRework?: (task: TaskCard) => Promise<string | void>,
   ) {
     super(app)
     this.task = JSON.parse(JSON.stringify(task))
@@ -29,6 +31,7 @@ export class TaskModal extends Modal {
     this.onDelete = onDelete
     this.onLoadBrief = onLoadBrief
     this.onSaveBrief = onSaveBrief
+    this.onTriggerRework = onTriggerRework
   }
 
   async onOpen() {
@@ -193,6 +196,30 @@ export class TaskModal extends Modal {
   private renderReviewTab(container: HTMLElement) {
     container.empty()
     if (!this.task.comments) this.task.comments = []
+
+    // Rework prompt section (only for existing tasks)
+    if (!this.isNew && this.onTriggerRework) {
+      const reworkSection = container.createDiv({ cls: 'av-rework-section' })
+      reworkSection.createEl('h4', { text: '🔄 Generate Rework Prompt' })
+      reworkSection.createEl('p', { text: 'Generate a rework prompt file from the review comments below. The file will be saved to rework/{taskId}.rework.md.', cls: 'av-brief-hint' })
+
+      const reworkActions = reworkSection.createDiv({ cls: 'av-rework-actions' })
+      const reworkBtn = reworkActions.createEl('button', { cls: 'mod-cta av-rework-btn', text: '📝 Generate Rework Prompt' })
+      reworkBtn.addEventListener('click', async () => {
+        reworkBtn.disabled = true
+        reworkBtn.textContent = 'Generating...'
+        try {
+          await this.onTriggerRework!(this.task)
+          reworkBtn.textContent = '✅ Prompt saved'
+          setTimeout(() => { reworkBtn.textContent = '📝 Generate Rework Prompt'; reworkBtn.disabled = false }, 3000)
+        } catch {
+          reworkBtn.textContent = '❌ Failed'
+          reworkBtn.disabled = false
+        }
+      })
+
+      container.createEl('hr', { cls: 'av-review-separator' })
+    }
 
     const inputSection = container.createDiv({ cls: 'av-review-input' })
     inputSection.createDiv({ cls: 'av-brief-hint', text: 'Add review feedback. "Review" comments will be included in AI rework prompts.' })

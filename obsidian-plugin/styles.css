@@ -531,3 +531,42 @@
 .av-column-body::-webkit-scrollbar-track { background: transparent; }
 .av-kanban-board::-webkit-scrollbar-thumb,
 .av-column-body::-webkit-scrollbar-thumb { background: var(--background-modifier-border); border-radius: 4px; }
+
+/* Header action buttons */
+.av-planning-header-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.av-header-btn {
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-secondary);
+  color: var(--text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.av-header-btn:hover { background: var(--background-modifier-hover); color: var(--text-normal); }
+.av-sync-btn { color: var(--interactive-accent); border-color: var(--interactive-accent); }
+.av-sync-btn:hover { background: var(--interactive-accent); color: var(--text-on-accent); }
+
+/* Rework section in Review tab */
+.av-rework-section {
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+}
+.av-rework-section h4 {
+  margin: 0 0 4px 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-normal);
+}
+.av-rework-actions { margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; }
+.av-rework-btn { font-size: 12px; }

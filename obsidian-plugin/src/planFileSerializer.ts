@@ -21,6 +21,8 @@ export function serializePlanFile(board: PlanBoard): string {
       lines.push(`- priority: ${task.priority}`)
       if (task.depends?.length) lines.push(`- depends: ${task.depends.join(', ')}`)
       if (task.output) lines.push(`- output: ${task.output}`)
+      if (task.clickupId) lines.push(`- clickupId: ${task.clickupId}`)
+      if (task.clickupListId) lines.push(`- clickupListId: ${task.clickupListId}`)
       if (task.comments?.length) lines.push(`- comments: ${JSON.stringify(task.comments)}`)
       lines.push('')
       if (task.description) { lines.push(task.description); lines.push('') }

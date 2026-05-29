@@ -1,12 +1,17 @@
 import { Plugin, TFile, WorkspaceLeaf } from 'obsidian'
 import { PlanningBoardView, PLANNING_VIEW_TYPE } from './PlanningBoardView'
+import { ArchVisualizerSettingsTab, ArchVisualizerSettings, DEFAULT_SETTINGS } from './SettingsTab'
 
 export default class ArchVisualizerPlanningPlugin extends Plugin {
   private planningView: PlanningBoardView | null = null
+  settings: ArchVisualizerSettings = { ...DEFAULT_SETTINGS }
 
   async onload() {
+    await this.loadSettings()
+    this.addSettingTab(new ArchVisualizerSettingsTab(this.app, this))
+
     this.registerView(PLANNING_VIEW_TYPE, (leaf: WorkspaceLeaf) => {
-      this.planningView = new PlanningBoardView(leaf, this.app)
+      this.planningView = new PlanningBoardView(leaf, this.app, this)
       return this.planningView
     })
 
@@ -35,6 +40,18 @@ export default class ArchVisualizerPlanningPlugin extends Plugin {
       callback: () => { this.planningView?.refresh() },
     })
 
+    this.addCommand({
+      id: 'open-plan-file',
+      name: 'Open current plan file in editor',
+      callback: () => { void this.planningView?.openCurrentPlanFile() },
+    })
+
+    this.addCommand({
+      id: 'sync-clickup',
+      name: 'Sync with ClickUp',
+      callback: () => { void this.planningView?.syncClickUp() },
+    })
+
     this.registerEvent(
       this.app.vault.on('modify', (file) => {
         if (file instanceof TFile && file.path.endsWith('.plan.md') && file.path.startsWith('planning/')) {
@@ -59,6 +76,14 @@ export default class ArchVisualizerPlanningPlugin extends Plugin {
   }
 
   onunload() { this.planningView = null }
+
+  async loadSettings() {
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData())
+  }
+
+  async saveSettings() {
+    await this.saveData(this.settings)
+  }
 
   async activateView(): Promise<void> {
     const existing = this.app.workspace.getLeavesOfType(PLANNING_VIEW_TYPE)

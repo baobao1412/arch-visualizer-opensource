@@ -61,6 +61,8 @@ function parseTaskBlock(block: string, column: string): TaskCard | null {
   let depends: string[] | undefined
   let output: string | undefined
   let comments: TaskComment[] | undefined
+  let clickupId: string | undefined
+  let clickupListId: string | undefined
   let priority: 'high' | 'medium' | 'low' = 'medium'
   const subtasks: Subtask[] = []
   const descriptionLines: string[] = []
@@ -73,7 +75,7 @@ function parseTaskBlock(block: string, column: string): TaskCard | null {
       subtasks.push({ done: subtaskMatch[1].toLowerCase() === 'x', text: subtaskMatch[2].trim() })
       continue
     }
-    const metaMatch = line.match(/^-\s+(milestone|deadline|priority|assignee|depends|output|comments):\s*(.+)$/)
+    const metaMatch = line.match(/^-\s+(milestone|deadline|priority|assignee|depends|output|comments|clickupId|clickupListId):\s*(.+)$/)
     if (metaMatch && !pastMetadata) {
       const [, key, value] = metaMatch
       switch (key) {
@@ -83,6 +85,8 @@ function parseTaskBlock(block: string, column: string): TaskCard | null {
         case 'output': output = value.trim(); break
         case 'comments': try { comments = JSON.parse(value.trim()) } catch { } break
         case 'depends': depends = value.split(',').map((v: string) => v.trim()).filter(Boolean); break
+        case 'clickupId': clickupId = value.trim(); break
+        case 'clickupListId': clickupListId = value.trim(); break
         case 'priority': {
           const p = value.trim().toLowerCase()
           if (p === 'high' || p === 'medium' || p === 'low') priority = p as 'high' | 'medium' | 'low'
@@ -97,5 +101,5 @@ function parseTaskBlock(block: string, column: string): TaskCard | null {
     }
   }
 
-  return { id, title, description: descriptionLines.join('\n').trim(), milestone, deadline, priority, column, assignee, depends, subtasks, comments, output }
+  return { id, title, description: descriptionLines.join('\n').trim(), milestone, deadline, priority, column, assignee, depends, subtasks, comments, output, clickupId, clickupListId }
 }

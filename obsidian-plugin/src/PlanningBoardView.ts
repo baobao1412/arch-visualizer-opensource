@@ -3,6 +3,8 @@ import { parsePlanFile } from './planFileParser'
 import { serializePlanFile, generateTaskId } from './planFileSerializer'
 import { TaskCard, PlanBoard, BriefContent, TaskComment } from './types'
 import { TaskModal } from './TaskModal'
+import { ClickUpSyncService } from './ClickUpSyncService'
+import type ArchVisualizerPlanningPlugin from './main'
 
 export const PLANNING_VIEW_TYPE = 'arch-visualizer-planning-board'
 
@@ -26,7 +28,7 @@ export class PlanningBoardView extends ItemView {
   private selfWriteTimeout: ReturnType<typeof setTimeout> | null = null
   private dragTask: TaskCard | null = null
 
-  constructor(leaf: WorkspaceLeaf, private readonly obsApp: App) {
+  constructor(leaf: WorkspaceLeaf, private readonly obsApp: App, private readonly plugin: ArchVisualizerPlanningPlugin) {
     super(leaf)
   }
 
@@ -88,10 +90,205 @@ export class PlanningBoardView extends ItemView {
     } else {
       const newFile = await this.obsApp.vault.create(filePath, content)
       await this.loadFile(newFile)
+      await this.generateConventionFiles()
     }
   }
 
+  private async generateConventionFiles() {
+    const baseInstructions = `# Planning Board — AI Instructions
+
+This vault uses a kanban-style planning board system managed by the Arch Visualizer plugin.
+
+## File Format
+
+Plan files are stored as \`planning/*.plan.md\` with YAML frontmatter + markdown sections:
+
+\`\`\`
+---
+title: Sprint Name
+columns:
+  - Todo
+  - In Progress
+  - Review
+  - Done
+---
+
+## Column Name
+
+### [task-1] Task Title
+- assignee: @username
+- milestone: v1.0
+- deadline: YYYY-MM-DD
+- priority: high|medium|low
+- depends: task-2, task-3
+- output: briefs/task-1.md
+- comments: [{"author":"Name","text":"...","timestamp":"ISO","type":"review|note|rework"}]
+
+Task description paragraph.
+
+- [ ] subtask 1
+- [x] subtask 2
+\`\`\`
+
+## Brief Files
+
+Extended task context is stored in \`planning/briefs/{taskId}.md\`:
+- \`## Context\` — Why this task exists
+- \`## Expected Output\` — What the result should look like
+- \`## Acceptance Criteria\` — When is this task done
+- \`## Technical Notes\` — Constraints, dependencies
+- \`## Rules & Format\` — Coding standards to follow
+
+## Rework Files
+
+When a task is sent back for rework, a prompt is saved to \`rework/{taskId}.rework.md\`.
+
+## Task ID Format
+
+Tasks use sequential IDs: \`task-1\`, \`task-2\`, etc.
+ClickUp-imported tasks use \`cu-{clickupId}\`.
+
+## Priority Levels
+
+- \`high\` — Critical path, must be done ASAP
+- \`medium\` — Normal priority (default)
+- \`low\` — Nice to have
+
+## Workflow
+
+1. Create tasks in **Todo**
+2. Move to **In Progress** when starting work
+3. Move to **Review** when ready for review
+4. Move to **Done** when accepted
+5. If rejected, move back to **In Progress/Todo** — triggers rework detection
+`
+
+    const claudeMd = `# Planning Board — Quick Reference (Claude)
+
+- Plan file: \`planning/sprint.plan.md\` (or any \`*.plan.md\`)
+- Task format: \`### [task-1] Title\` with metadata lines and description
+- Briefs: \`planning/briefs/{taskId}.md\`
+- Rework prompts: \`rework/{taskId}.rework.md\`
+- Priorities: high | medium | low
+- Status columns: Todo → In Progress → Review → Done
+
+When asked to work on a task, read the brief file first if it exists.
+When generating code, check for existing patterns in the codebase first.
+`
+
+    const copilotInstructions = `# Arch Visualizer Planning Board
+
+This repository uses a kanban planning system. Task specs live in \`planning/briefs/{taskId}.md\`.
+Check the brief for context, expected output, and acceptance criteria before starting work.
+Rework context is in \`rework/{taskId}.rework.md\` when a task has been reviewed.
+`
+
+    const cursorRules = `---
+description: Planning board task context
+globs: ["planning/**", "rework/**"]
+alwaysApply: false
+---
+
+# Planning Board Rules
+
+- Read brief files from \`planning/briefs/{taskId}.md\` for task context
+- Rework prompts in \`rework/{taskId}.rework.md\` contain reviewer feedback
+- Task IDs follow pattern \`task-N\` or \`cu-{clickupId}\`
+- Check acceptance criteria before marking work complete
+`
+
+    const writes: [string, string][] = [
+      ['.instructions.md', baseInstructions],
+      ['CLAUDE.md', claudeMd],
+      ['.github/copilot-instructions.md', copilotInstructions],
+      ['.cursor/rules/planning.mdc', cursorRules],
+    ]
+
+    for (const [path, content] of writes) {
+      try {
+        const dir = path.includes('/') ? path.substring(0, path.lastIndexOf('/')) : null
+        if (dir) { try { await this.obsApp.vault.createFolder(dir) } catch { } }
+        const existing = this.obsApp.vault.getAbstractFileByPath(path)
+        if (!existing) await this.obsApp.vault.create(path, content)
+      } catch { }
+    }
+    new Notice('✅ Created plan file + AI convention files (.instructions.md, CLAUDE.md, etc.)')
+  }
+
   refresh() { void this.autoLoad() }
+
+  async openCurrentPlanFile() {
+    if (!this.currentFile) { new Notice('No plan file loaded.'); return }
+    await this.obsApp.workspace.openLinkText(this.currentFile.basename, this.currentFile.path)
+  }
+
+  async syncClickUp() {
+    if (!this.board) { new Notice('No plan loaded.'); return }
+    const { clickupToken, clickupListId } = this.plugin.settings
+    if (!clickupToken || !clickupListId) {
+      new Notice('⚙️ Configure ClickUp token and list ID in Settings → Arch Visualizer.')
+      return
+    }
+    new Notice('🔄 Syncing with ClickUp...')
+    const svc = new ClickUpSyncService(clickupToken, clickupListId, this.obsApp.vault)
+    try {
+      const { board, added, updated, briefs } = await svc.pullFromClickUp(this.board)
+      this.board = board
+      await this.writeToDisk()
+      this.render()
+      new Notice(`✅ ClickUp sync done: +${added} new, ~${updated} updated, ${briefs} briefs written.`)
+    } catch (e) {
+      new Notice(`❌ Sync failed: ${e instanceof Error ? e.message : String(e)}`)
+    }
+  }
+
+  async generateReworkPrompt(task: TaskCard) {
+    try { await this.obsApp.vault.createFolder('rework') } catch { }
+    const reviewComments = (task.comments || []).filter(c => c.type === 'review' || c.type === 'rework')
+    const commentBlock = reviewComments.length
+      ? reviewComments.map(c => `### ${c.author} (${new Date(c.timestamp).toLocaleString()})\n${c.text}`).join('\n\n')
+      : '_No review comments yet._'
+
+    let briefSection = ''
+    const briefFile = this.obsApp.vault.getAbstractFileByPath(`planning/briefs/${task.id}.md`)
+    if (briefFile instanceof TFile) {
+      const briefContent = await this.obsApp.vault.read(briefFile)
+      briefSection = `\n## Original Brief\n\n${briefContent}\n`
+    }
+
+    const content = `# Rework Prompt: ${task.title}
+
+**Task ID:** ${task.id}
+**Priority:** ${task.priority}
+**Assignee:** ${task.assignee || '_unassigned_'}
+
+## Task Description
+
+${task.description || '_No description._'}
+${briefSection}
+## Review Feedback
+
+${commentBlock}
+
+## Instructions for AI Agent
+
+Based on the review feedback above, please:
+1. Review the original task description and brief
+2. Address each piece of feedback
+3. Implement the requested changes
+4. Ensure all acceptance criteria are met before marking as complete
+
+`
+    const path = `rework/${task.id}.rework.md`
+    const existing = this.obsApp.vault.getAbstractFileByPath(path)
+    if (existing instanceof TFile) await this.obsApp.vault.modify(existing, content)
+    else await this.obsApp.vault.create(path, content)
+
+    const notice = new Notice(`🔄 Rework prompt saved: rework/${task.id}.rework.md`, 8000)
+    // Add clickable "Open" action via notice
+    void this.obsApp.workspace.openLinkText(`${task.id}.rework`, path)
+    return path
+  }
 
   private render() {
     const container = this.containerEl.children[1] as HTMLElement
@@ -108,6 +305,13 @@ export class PlanningBoardView extends ItemView {
     if (this.currentFile) {
       header.createEl('span', { cls: 'av-planning-filepath', text: this.currentFile.name, attr: { title: this.currentFile.path } })
     }
+
+    // Header action buttons
+    const headerRight = header.createDiv({ cls: 'av-planning-header-right' })
+    const openBtn = headerRight.createEl('button', { cls: 'av-header-btn', text: '📄 Open File', attr: { title: 'Open plan file in editor' } })
+    openBtn.addEventListener('click', () => void this.openCurrentPlanFile())
+    const syncBtn = headerRight.createEl('button', { cls: 'av-header-btn av-sync-btn', text: '☁ Sync ClickUp', attr: { title: 'Sync with ClickUp' } })
+    syncBtn.addEventListener('click', () => void this.syncClickUp())
 
     // Board
     const boardEl = container.createDiv({ cls: 'av-kanban-board' })
@@ -281,6 +485,14 @@ export class PlanningBoardView extends ItemView {
       if (!this.board.tasks[taskIdx].comments) this.board.tasks[taskIdx].comments = []
       this.board.tasks[taskIdx].comments!.push(comment)
       new Notice(`🔄 Rework: "${task.title}" moved back for revision.`)
+      // Generate rework prompt file (non-blocking)
+      void this.generateReworkPrompt(this.board.tasks[taskIdx])
+    }
+
+    // Push status to ClickUp if task has clickupId
+    if (task.clickupId && this.plugin.settings.clickupToken) {
+      const svc = new ClickUpSyncService(this.plugin.settings.clickupToken, this.plugin.settings.clickupListId, this.obsApp.vault)
+      void svc.pushTaskToClickUp({ ...task, column: toColumn })
     }
 
     const moved = this.board.tasks.splice(taskIdx, 1)[0]
@@ -426,6 +638,7 @@ export class PlanningBoardView extends ItemView {
       },
       (taskId) => this.readBrief(taskId),
       (taskId, brief) => this.writeBrief(taskId, brief),
+      (t) => this.generateReworkPrompt(t),
     ).open()
   }
 

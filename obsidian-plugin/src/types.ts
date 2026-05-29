@@ -31,6 +31,8 @@ export interface TaskCard {
   subtasks: Subtask[]
   comments?: TaskComment[]
   output?: string
+  clickupId?: string
+  clickupListId?: string
 }
 
 export interface PlanBoard {
