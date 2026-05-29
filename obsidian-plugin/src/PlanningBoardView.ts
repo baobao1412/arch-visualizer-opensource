@@ -27,6 +27,7 @@ export class PlanningBoardView extends ItemView {
   private selfWriteFlag = false
   private selfWriteTimeout: ReturnType<typeof setTimeout> | null = null
   private dragTask: TaskCard | null = null
+  private graphMode = false
 
   constructor(leaf: WorkspaceLeaf, private readonly obsApp: App, private readonly plugin: ArchVisualizerPlanningPlugin) {
     super(leaf)
@@ -308,10 +309,21 @@ Based on the review feedback above, please:
 
     // Header action buttons
     const headerRight = header.createDiv({ cls: 'av-planning-header-right' })
+    const graphBtn = headerRight.createEl('button', {
+      cls: 'av-header-btn av-graph-toggle-btn',
+      text: this.graphMode ? '📋 Board' : '📊 Graph',
+      attr: { title: this.graphMode ? 'Switch to Board view' : 'Switch to Dependency Graph' }
+    })
+    graphBtn.addEventListener('click', () => { this.graphMode = !this.graphMode; this.render() })
     const openBtn = headerRight.createEl('button', { cls: 'av-header-btn', text: '📄 Open File', attr: { title: 'Open plan file in editor' } })
     openBtn.addEventListener('click', () => void this.openCurrentPlanFile())
     const syncBtn = headerRight.createEl('button', { cls: 'av-header-btn av-sync-btn', text: '☁ Sync ClickUp', attr: { title: 'Sync with ClickUp' } })
     syncBtn.addEventListener('click', () => void this.syncClickUp())
+
+    if (this.graphMode) {
+      this.renderGraphView(container)
+      return
+    }
 
     // Board
     const boardEl = container.createDiv({ cls: 'av-kanban-board' })
@@ -323,6 +335,161 @@ Based on the review feedback above, please:
     // Add column
     const addColBtn = boardEl.createDiv({ cls: 'av-add-column-btn', text: '+ Add Column' })
     addColBtn.addEventListener('click', () => void this.promptAddColumn())
+  }
+
+  private renderGraphView(container: HTMLElement) {
+    if (!this.board) return
+
+    const NODE_W = 200
+    const NODE_H = 105
+    const H_GAP  = 72
+    const V_GAP  = 16
+    const PAD_TOP = 52
+    const PAD_LEFT = 16
+
+    // Group tasks per column
+    const grouped: Map<string, TaskCard[]> = new Map()
+    for (const col of this.board.columns) grouped.set(col, [])
+    for (const task of this.board.tasks) {
+      const arr = grouped.get(task.column)
+      if (arr) arr.push(task)
+      else grouped.set(task.column, [task])
+    }
+
+    // Calculate positions
+    const pos: Record<string, { x: number; y: number }> = {}
+    let colIdx = 0
+    for (const col of this.board.columns) {
+      const tasks = grouped.get(col) || []
+      tasks.forEach((task, rowIdx) => {
+        pos[task.id] = {
+          x: PAD_LEFT + colIdx * (NODE_W + H_GAP),
+          y: PAD_TOP + rowIdx * (NODE_H + V_GAP),
+        }
+      })
+      colIdx++
+    }
+
+    const totalCols = this.board.columns.length
+    const maxRows = Math.max(...Array.from(grouped.values()).map(a => a.length), 1)
+    const canvasW = PAD_LEFT * 2 + totalCols * (NODE_W + H_GAP)
+    const canvasH = PAD_TOP + maxRows * (NODE_H + V_GAP) + 24
+
+    const wrapper = container.createDiv({ cls: 'av-graph-wrapper' })
+    const canvas = wrapper.createDiv({ cls: 'av-graph-canvas' })
+    canvas.style.width = `${canvasW}px`
+    canvas.style.height = `${canvasH}px`
+
+    // SVG edge layer
+    const svgNS = 'http://www.w3.org/2000/svg'
+    const svg = document.createElementNS(svgNS, 'svg')
+    svg.setAttribute('class', 'av-graph-svg')
+    svg.setAttribute('width', String(canvasW))
+    svg.setAttribute('height', String(canvasH))
+    svg.style.cssText = 'position:absolute;top:0;left:0;pointer-events:none;overflow:visible;'
+
+    // Arrowhead marker
+    const defs = document.createElementNS(svgNS, 'defs')
+    const marker = document.createElementNS(svgNS, 'marker')
+    marker.setAttribute('id', 'av-arrow')
+    marker.setAttribute('markerWidth', '9')
+    marker.setAttribute('markerHeight', '7')
+    marker.setAttribute('refX', '9')
+    marker.setAttribute('refY', '3.5')
+    marker.setAttribute('orient', 'auto')
+    const poly = document.createElementNS(svgNS, 'polygon')
+    poly.setAttribute('points', '0 0, 9 3.5, 0 7')
+    poly.setAttribute('fill', 'rgba(167,139,250,0.75)')
+    marker.appendChild(poly)
+    defs.appendChild(marker)
+    svg.appendChild(defs)
+
+    // Draw edges
+    for (const task of this.board.tasks) {
+      for (const depId of (task.depends || [])) {
+        const from = pos[depId]
+        const to = pos[task.id]
+        if (!from || !to) continue
+        const x1 = from.x + NODE_W
+        const y1 = from.y + NODE_H / 2
+        const x2 = to.x
+        const y2 = to.y + NODE_H / 2
+        const cx = (x1 + x2) / 2
+        const path = document.createElementNS(svgNS, 'path')
+        path.setAttribute('d', `M ${x1} ${y1} C ${cx} ${y1}, ${cx} ${y2}, ${x2} ${y2}`)
+        path.setAttribute('stroke', 'rgba(167,139,250,0.5)')
+        path.setAttribute('stroke-width', '1.5')
+        path.setAttribute('fill', 'none')
+        path.setAttribute('marker-end', 'url(#av-arrow)')
+        svg.appendChild(path)
+      }
+    }
+    canvas.appendChild(svg)
+
+    // Column labels row
+    for (const [colName, _tasks] of grouped.entries()) {
+      const idx = this.board.columns.indexOf(colName)
+      if (idx === -1) continue
+      const colColor = COLUMN_COLORS[colName.toLowerCase()] || '#9e9e9e'
+      const label = canvas.createDiv({ cls: 'av-graph-col-label' })
+      label.style.cssText = `position:absolute;top:10px;left:${PAD_LEFT + idx * (NODE_W + H_GAP)}px;width:${NODE_W}px;`
+      const dot = label.createDiv({ cls: 'av-graph-col-dot' })
+      dot.style.cssText = `background:${colColor};box-shadow:0 0 6px ${colColor};`
+      label.createEl('span', { text: `${colName} (${(_tasks).length})` })
+      label.style.color = colColor
+    }
+
+    // Task nodes
+    for (const task of this.board.tasks) {
+      const p = pos[task.id]
+      if (!p) continue
+      const colColor = COLUMN_COLORS[task.column.toLowerCase()] || '#9e9e9e'
+      const priorityColor = PRIORITY_COLORS[task.priority] || '#475569'
+
+      const node = canvas.createDiv({ cls: 'av-graph-node' })
+      node.style.cssText = `position:absolute;left:${p.x}px;top:${p.y}px;width:${NODE_W}px;`
+      node.style.setProperty('--col-color', colColor)
+      node.style.setProperty('--priority-color', priorityColor)
+      node.addEventListener('click', () => void this.openEditTask(task))
+
+      const inner = node.createDiv({ cls: 'av-graph-node-inner' })
+
+      // Top row
+      const topRow = inner.createDiv({ cls: 'av-graph-node-top' })
+      topRow.createEl('span', { cls: 'av-task-id', text: task.id })
+      topRow.createEl('span', { cls: `av-task-tag av-priority-tag av-priority-${task.priority}`, text: task.priority })
+
+      inner.createEl('div', { cls: 'av-graph-node-title', text: task.title })
+
+      // Description preview
+      if (task.description?.trim()) {
+        inner.createEl('div', { cls: 'av-graph-node-desc', text: task.description.slice(0, 80) + (task.description.length > 80 ? '…' : '') })
+      }
+
+      // Bottom row: column badge + assignee
+      const bottom = inner.createDiv({ cls: 'av-graph-node-bottom' })
+      const badge = bottom.createEl('span', { cls: 'av-graph-col-badge', text: task.column })
+      badge.style.cssText = `color:${colColor};background:${colColor}1a;border:1px solid ${colColor}33;`
+      if (task.assignee) {
+        const avatar = bottom.createDiv({ cls: 'av-graph-node-avatar' })
+        avatar.textContent = task.assignee.replace('@', '').charAt(0).toUpperCase()
+        avatar.title = task.assignee
+      }
+
+      // Dependency count badge
+      const depCount = (task.depends || []).length
+      const depOf = this.board.tasks.filter(t => (t.depends || []).includes(task.id)).length
+      if (depCount || depOf) {
+        const depBadge = inner.createEl('div', { cls: 'av-graph-node-deps' })
+        if (depCount) depBadge.createEl('span', { text: `↑${depCount} dep` })
+        if (depOf) depBadge.createEl('span', { text: `↓${depOf} blocked` })
+      }
+    }
+
+    // Empty state
+    if (!this.board.tasks.length) {
+      wrapper.createDiv({ cls: 'av-graph-empty', text: 'No tasks yet. Add tasks from the Board view.' })
+    }
   }
 
   private renderColumn(parent: HTMLElement, column: string, tasks: TaskCard[]) {
