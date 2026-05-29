@@ -88,7 +88,6 @@ export function TaskForm({
   const [briefAcceptanceCriteria, setBriefAcceptanceCriteria] = useState(brief?.acceptanceCriteria || '')
   const [briefTechnicalNotes,     setBriefTechnicalNotes]     = useState(brief?.technicalNotes     || '')
   const [briefRulesFormat,        setBriefRulesFormat]        = useState(brief?.rulesFormat        || '')
-  const [briefLinks,              setBriefLinks]              = useState<string[]>(brief?.links    || [])
   const [copied, setCopied] = useState(false)
 
   useEffect(() => {
@@ -98,7 +97,6 @@ export function TaskForm({
     setBriefAcceptanceCriteria(brief.acceptanceCriteria || '')
     setBriefTechnicalNotes(brief.technicalNotes     || '')
     setBriefRulesFormat(brief.rulesFormat        || '')
-    setBriefLinks(brief.links                    || [])
   }, [brief])
 
   const hasBriefContent =
@@ -106,8 +104,7 @@ export function TaskForm({
     briefExpectedOutput.trim()     ||
     briefAcceptanceCriteria.trim() ||
     briefTechnicalNotes.trim()     ||
-    briefRulesFormat.trim()        ||
-    briefLinks.some((l) => l.trim())
+    briefRulesFormat.trim()
 
   const displayId = task?.id
     ? (task.id.startsWith('task-') ? `#T-${task.id.slice(5)}` : `#${task.id}`)
@@ -127,7 +124,6 @@ export function TaskForm({
           acceptanceCriteria: briefAcceptanceCriteria.trim(),
           technicalNotes:     briefTechnicalNotes.trim(),
           rulesFormat:        briefRulesFormat.trim(),
-          links:              briefLinks.map((l) => l.trim()).filter(Boolean),
         }
       : null
 
@@ -168,7 +164,6 @@ export function TaskForm({
   }
 
   const handleCopyPrompt = () => {
-    const linkLines = briefLinks.filter((l) => l.trim())
     const parts: string[] = [
       `TASK: ${title || task?.title || '(untitled)'}`,
       `ID: ${task?.id || 'new'}`,
@@ -179,7 +174,6 @@ export function TaskForm({
     if (briefAcceptanceCriteria.trim()) parts.push(`ACCEPTANCE CRITERIA:\n${briefAcceptanceCriteria.trim()}`, '')
     if (briefTechnicalNotes.trim())     parts.push(`TECHNICAL NOTES:\n${briefTechnicalNotes.trim()}`, '')
     if (briefRulesFormat.trim())        parts.push(`RULES & FORMAT:\n${briefRulesFormat.trim()}`, '')
-    if (linkLines.length)               parts.push(`REFERENCE LINKS:\n${linkLines.join('\n')}`)
 
     const prompt = parts.join('\n').trimEnd()
 
@@ -196,12 +190,6 @@ export function TaskForm({
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
-
-  const updateLink = (index: number, value: string) =>
-    setBriefLinks((prev) => prev.map((l, i) => (i === index ? value : l)))
-  const removeLink = (index: number) =>
-    setBriefLinks((prev) => prev.filter((_, i) => i !== index))
-  const addLink = () => setBriefLinks((prev) => [...prev, ''])
 
   return (
     <div className="task-detail-overlay" onClick={onClose}>
@@ -415,35 +403,6 @@ export function TaskForm({
                     placeholder="Coding standards, naming conventions, output format..."
                     rows={3}
                   />
-                </div>
-
-                <div className="brief-section">
-                  <div className="brief-section-label">
-                    <span className="brief-section-icon">&#128279;</span> Reference Links
-                  </div>
-                  <div className="brief-links-list">
-                    {briefLinks.map((link, i) => (
-                      <div key={i} className="brief-link-item">
-                        <input
-                          type="url"
-                          value={link}
-                          onChange={(e) => updateLink(i, e.target.value)}
-                          placeholder="https://..."
-                        />
-                        <button
-                          type="button"
-                          className="brief-link-remove"
-                          onClick={() => removeLink(i)}
-                          title="Remove"
-                        >
-                          &times;
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                  <button type="button" className="brief-link-add-btn" onClick={addLink}>
-                    + Add reference URL
-                  </button>
                 </div>
 
                 <div className="brief-divider" />
