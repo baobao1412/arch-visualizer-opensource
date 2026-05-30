@@ -73,82 +73,77 @@ export function useBoard(onMessage: OnMessage, postMessage: PostMessage, isVscod
   }, [])
 
   const dispatch = useCallback((action: OutgoingAction) => {
-    if (isVscode) {
-      postMessage(action)
-      return
-    }
-
-    setBoard((prev) => {
-      if (!prev) return prev
-
-      switch (action.type) {
-        case 'moveTask': {
-          const task = prev.tasks.find((t) => t.id === action.taskId)
-          if (!task) return prev
-          // Rework detection
-          const fromLower = task.column.toLowerCase()
-          const toLower = action.toColumn.toLowerCase()
-          const isRework = (fromLower === 'review' || fromLower === 'done') &&
-            (toLower === 'in progress' || toLower === 'todo')
-          const moved = { ...task, column: action.toColumn }
-          if (isRework) {
-            const reworkComment: TaskComment = {
-              author: 'System',
-              text: `Task moved from "${task.column}" back to "${action.toColumn}" for rework.`,
-              timestamp: new Date().toISOString(),
-              type: 'rework',
-            }
-            moved.comments = [...(moved.comments || []), reworkComment]
-          }
-          const columnTasks = prev.tasks.filter((t) => t.column === action.toColumn && t.id !== action.taskId)
-          const others = prev.tasks.filter((t) => t.column !== action.toColumn && t.id !== action.taskId)
-          columnTasks.splice(action.insertIndex, 0, moved)
-          return { ...prev, tasks: reorderByColumns(prev.columns, [...others, ...columnTasks]) }
-        }
-        case 'reorderTask': {
-          const task = prev.tasks.find((t) => t.id === action.taskId)
-          if (!task) return prev
-          const columnTasks = prev.tasks.filter((t) => t.column === task.column && t.id !== action.taskId)
-          const others = prev.tasks.filter((t) => t.column !== task.column)
-          columnTasks.splice(action.insertIndex, 0, task)
-          return { ...prev, tasks: reorderByColumns(prev.columns, [...others, ...columnTasks]) }
-        }
-        case 'createTask': {
-          const nextId = generateTaskId(prev.tasks)
-          const created: TaskCard = { id: nextId, ...action.task, output: `briefs/${nextId}.md` }
-          return { ...prev, tasks: [...prev.tasks, created] }
-        }
-        case 'updateTask': {
-          return {
-            ...prev,
-            tasks: prev.tasks.map((t) => (t.id === action.task.id ? action.task : t)),
-          }
-        }
-        case 'deleteTask': {
-          return { ...prev, tasks: prev.tasks.filter((t) => t.id !== action.taskId) }
-        }
-        case 'toggleSubtask': {
-          return {
-            ...prev,
-            tasks: prev.tasks.map((t) => {
-              if (t.id !== action.taskId) return t
-              if (!t.subtasks[action.subtaskIndex]) return t
-              const subtasks = [...t.subtasks]
-              subtasks[action.subtaskIndex] = {
-                ...subtasks[action.subtaskIndex],
-                done: !subtasks[action.subtaskIndex].done,
-              }
-              return { ...t, subtasks }
-            }),
-          }
-        }
-        default:
-          return prev
-      }
-    })
+    setBoard((prev) => (prev ? reduceBoard(prev, action) : prev))
+    if (isVscode) postMessage(action)
   }, [isVscode, postMessage])
 
   return { board, filePath, dispatch, createLocalPlan }
+}
+
+function reduceBoard(prev: PlanBoard, action: OutgoingAction): PlanBoard {
+  switch (action.type) {
+    case 'moveTask': {
+      const task = prev.tasks.find((t) => t.id === action.taskId)
+      if (!task) return prev
+      const fromLower = task.column.toLowerCase()
+      const toLower = action.toColumn.toLowerCase()
+      const isRework = (fromLower === 'review' || fromLower === 'done') &&
+        (toLower === 'in progress' || toLower === 'todo')
+      const moved = { ...task, column: action.toColumn }
+      if (isRework) {
+        const reworkComment: TaskComment = {
+          author: 'System',
+          text: `Task moved from "${task.column}" back to "${action.toColumn}" for rework.`,
+          timestamp: new Date().toISOString(),
+          type: 'rework',
+        }
+        moved.comments = [...(moved.comments || []), reworkComment]
+      }
+      const columnTasks = prev.tasks.filter((t) => t.column === action.toColumn && t.id !== action.taskId)
+      const others = prev.tasks.filter((t) => t.column !== action.toColumn && t.id !== action.taskId)
+      columnTasks.splice(action.insertIndex, 0, moved)
+      return { ...prev, tasks: reorderByColumns(prev.columns, [...others, ...columnTasks]) }
+    }
+    case 'reorderTask': {
+      const task = prev.tasks.find((t) => t.id === action.taskId)
+      if (!task) return prev
+      const columnTasks = prev.tasks.filter((t) => t.column === task.column && t.id !== action.taskId)
+      const others = prev.tasks.filter((t) => t.column !== task.column)
+      columnTasks.splice(action.insertIndex, 0, task)
+      return { ...prev, tasks: reorderByColumns(prev.columns, [...others, ...columnTasks]) }
+    }
+    case 'createTask': {
+      const nextId = generateTaskId(prev.tasks)
+      const created: TaskCard = { id: nextId, ...action.task, output: `briefs/${nextId}.md` }
+      return { ...prev, tasks: [...prev.tasks, created] }
+    }
+    case 'updateTask': {
+      return {
+        ...prev,
+        tasks: prev.tasks.map((t) => (t.id === action.task.id ? action.task : t)),
+      }
+    }
+    case 'deleteTask': {
+      return { ...prev, tasks: prev.tasks.filter((t) => t.id !== action.taskId) }
+    }
+    case 'toggleSubtask': {
+      return {
+        ...prev,
+        tasks: prev.tasks.map((t) => {
+          if (t.id !== action.taskId) return t
+          if (!t.subtasks[action.subtaskIndex]) return t
+          const subtasks = [...t.subtasks]
+          subtasks[action.subtaskIndex] = {
+            ...subtasks[action.subtaskIndex],
+            done: !subtasks[action.subtaskIndex].done,
+          }
+          return { ...t, subtasks }
+        }),
+      }
+    }
+    default:
+      return prev
+  }
 }
 
 function reorderByColumns(columns: string[], tasks: TaskCard[]): TaskCard[] {

@@ -130,11 +130,8 @@ export default function PlanningApp() {
   const handleToggleSubtask = useCallback(
     (taskId: string, subtaskIndex: number) => {
       dispatch({ type: 'toggleSubtask', taskId, subtaskIndex })
-      if (isVscode) {
-        postMessage({ type: 'toggleSubtask', taskId, subtaskIndex })
-      }
     },
-    [dispatch, isVscode, postMessage],
+    [dispatch],
   )
 
   if (!board) {

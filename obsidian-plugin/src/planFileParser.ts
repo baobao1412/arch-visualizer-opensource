@@ -32,17 +32,38 @@ function parseFrontmatter(fm: string): { title?: string; columns?: string[] } {
 
 function parseBody(body: string, columns: string[]): TaskCard[] {
   const tasks: TaskCard[] = []
-  const columnSections = body.split(/^## /m).filter(Boolean)
-  for (const section of columnSections) {
-    const lines = section.split(/\r?\n/)
-    const columnName = lines[0].trim()
-    if (!columns.includes(columnName)) continue
-    const taskBlocks = section.split(/^### /m).slice(1)
-    for (const block of taskBlocks) {
-      const task = parseTaskBlock(block, columnName)
-      if (task) tasks.push(task)
-    }
+  const lines = body.split(/\r?\n/)
+  let currentColumn: string | null = null
+  let currentTaskLines: string[] = []
+
+  const flushTask = () => {
+    if (!currentColumn || !currentTaskLines.length) return
+    const task = parseTaskBlock(currentTaskLines.join('\n'), currentColumn)
+    if (task) tasks.push(task)
+    currentTaskLines = []
   }
+
+  for (const line of lines) {
+    const columnMatch = line.match(/^##\s+(.+)$/)
+    if (columnMatch) {
+      flushTask()
+      const maybeColumn = columnMatch[1].trim()
+      currentColumn = columns.includes(maybeColumn) ? maybeColumn : null
+      continue
+    }
+
+    const isTaskHeader = /^###\s+\[[^\]]+\]\s+.+$/.test(line)
+    if (isTaskHeader) {
+      flushTask()
+      if (!currentColumn) continue
+      currentTaskLines = [line.replace(/^###\s+/, '')]
+      continue
+    }
+
+    if (currentTaskLines.length) currentTaskLines.push(line)
+  }
+
+  flushTask()
   return tasks
 }
 
