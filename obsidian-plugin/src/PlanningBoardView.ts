@@ -467,15 +467,25 @@ Based on the review feedback above, please:
     }
 
     const totalCols = this.board.columns.length
-    const maxRows = Math.max(...Array.from(grouped.values()).map(a => a.length), 1)
     const viewportW = Math.max(container.clientWidth - 20, 980)
     const viewportH = Math.max(container.clientHeight - 56, 640)
     const canvasW = Math.max(viewportW, PAD_LEFT + PAD_RIGHT + totalCols * 220)
-    const canvasH = Math.max(viewportH, PAD_TOP + PAD_BOTTOM + maxRows * 180)
+
+    const ROW_GAP = 24
+    let requiredCanvasH = viewportH
+    for (const col of this.board.columns) {
+      const tasks = grouped.get(col) || []
+      let cursor = PAD_TOP
+      for (const task of tasks) {
+        const size = nodeSize[task.id] || 96
+        cursor += size + ROW_GAP
+      }
+      requiredCanvasH = Math.max(requiredCanvasH, cursor + PAD_BOTTOM)
+    }
+    const canvasH = Math.max(viewportH, requiredCanvasH)
 
     const pos: Record<string, { x: number; y: number }> = {}
     const colSpan = Math.max(canvasW - PAD_LEFT - PAD_RIGHT, 1)
-    const availableH = Math.max(canvasH - PAD_TOP - PAD_BOTTOM, 1)
     for (let i = 0; i < this.board.columns.length; i++) {
       const col = this.board.columns[i]
       const tasks = grouped.get(col) || []
@@ -483,11 +493,14 @@ Based on the review feedback above, please:
         ? canvasW / 2
         : PAD_LEFT + (colSpan * i) / (this.board.columns.length - 1)
 
+      let cursorY = PAD_TOP
       tasks.forEach((task, rowIdx) => {
-        const y = PAD_TOP + (availableH * (rowIdx + 1)) / (tasks.length + 1)
+        const size = nodeSize[task.id] || 96
+        const y = cursorY + size / 2
         const jitterX = ((rowIdx % 2) * 2 - 1) * 16
         pos[task.id] = { x: colCenterX, y }
         pos[task.id].x = clamp(colCenterX + jitterX, PAD_LEFT + 90, canvasW - PAD_RIGHT - 90)
+        cursorY += size + ROW_GAP
       })
     }
 
@@ -578,9 +591,9 @@ Based on the review feedback above, please:
       const targetTy = viewport.clientHeight / 2 - p.y * viewState.scale
       viewState.tx = targetTx
       viewState.ty = targetTy
-      canvas.style.transition = animate ? 'transform 180ms ease' : ''
+      canvas.style.transition = animate ? 'transform 360ms cubic-bezier(0.22, 1, 0.36, 1)' : ''
       applyViewTransform()
-      if (animate) setTimeout(() => { canvas.style.transition = '' }, 220)
+      if (animate) setTimeout(() => { canvas.style.transition = '' }, 420)
     }
 
     viewport.addEventListener('wheel', (ev: WheelEvent) => {
@@ -756,11 +769,11 @@ Based on the review feedback above, please:
       })
     }
 
-    const applyFocus = (nodeId: string | null) => {
+    const applyFocus = (nodeId: string | null, opts?: { center?: boolean }) => {
       focusNodeId = nodeId
       redrawEdges()
       refreshNodeFocus()
-      if (nodeId) centerOnNode(nodeId)
+      if (nodeId && opts?.center) centerOnNode(nodeId)
       this.lastPinnedNodeId = pinnedNodeId
       void this.saveGraphMemory({
         scale: viewState.scale,
@@ -885,7 +898,7 @@ Based on the review feedback above, please:
         node.classList.remove('av-graph-node-dragging')
         if (!dragState.moved) {
           pinnedNodeId = pinnedNodeId === task.id ? null : task.id
-          applyFocus(pinnedNodeId)
+          applyFocus(pinnedNodeId, { center: !!pinnedNodeId })
           void this.openEditTask(task)
         }
         void this.saveGraphMemory({
@@ -898,7 +911,7 @@ Based on the review feedback above, please:
       })
     }
 
-    applyFocus(null)
+    applyFocus(pinnedNodeId, { center: !!pinnedNodeId })
     applyViewTransform()
 
     // Empty state
