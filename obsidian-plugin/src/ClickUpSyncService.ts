@@ -65,6 +65,7 @@ export interface PushAllResult {
   updated: number
   failed: number
   commentsSynced: number
+  errorSamples: string[]
 }
 
 export class ClickUpSyncService {
@@ -234,7 +235,7 @@ export class ClickUpSyncService {
   }
 
   async pushAllTasksToClickUp(tasks: TaskCard[]): Promise<PushAllResult> {
-    const result: PushAllResult = { created: 0, updated: 0, failed: 0, commentsSynced: 0 }
+    const result: PushAllResult = { created: 0, updated: 0, failed: 0, commentsSynced: 0, errorSamples: [] }
     if (!this.authToken) return result
 
     // Build lookup once so Sync Up can update by title even when task has no clickupId.
@@ -250,6 +251,9 @@ export class ClickUpSyncService {
       const pushed = await this.upsertTaskToClickUp(task, resolvedId)
       if (!pushed.ok) {
         result.failed++
+        if (pushed.reason && result.errorSamples.length < 5) {
+          result.errorSamples.push(`${task.title}: ${pushed.reason}`)
+        }
         continue
       }
       if (pushed.created) result.created++
@@ -263,8 +267,8 @@ export class ClickUpSyncService {
     return result
   }
 
-  private async upsertTaskToClickUp(task: TaskCard, clickupId?: string): Promise<{ ok: boolean; created: boolean; clickupId?: string }> {
-    if (!this.authToken) return { ok: false, created: false }
+  private async upsertTaskToClickUp(task: TaskCard, clickupId?: string): Promise<{ ok: boolean; created: boolean; clickupId?: string; reason?: string }> {
+    if (!this.authToken) return { ok: false, created: false, reason: 'Missing ClickUp token' }
 
     const statusName = LOCAL_TO_CU_STATUS[task.column.toLowerCase()] || 'to do'
     const priorityNum = LOCAL_TO_CU_PRIORITY[task.priority] ?? 3
@@ -295,19 +299,34 @@ export class ClickUpSyncService {
 
     try {
       if (clickupId) {
-        const updateResp = await this.requestJson<unknown>(`/task/${clickupId}`, 'PUT', body)
-        const ok = updateResp.status >= 200 && updateResp.status < 300
-        return { ok, created: false, clickupId }
+        try {
+          const updateResp = await this.requestJson<unknown>(`/task/${clickupId}`, 'PUT', body)
+          const ok = updateResp.status >= 200 && updateResp.status < 300
+          return { ok, created: false, clickupId, reason: ok ? undefined : `HTTP ${updateResp.status}` }
+        } catch (e) {
+          const fallbackBody = { ...body }
+          delete fallbackBody.status
+          try {
+            const fallbackResp = await this.requestJson<unknown>(`/task/${clickupId}`, 'PUT', fallbackBody)
+            const ok = fallbackResp.status >= 200 && fallbackResp.status < 300
+            return { ok, created: false, clickupId, reason: ok ? undefined : `HTTP ${fallbackResp.status}` }
+          } catch (fallbackErr) {
+            const reason = fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr)
+            const primary = e instanceof Error ? e.message : String(e)
+            return { ok: false, created: false, clickupId, reason: `${primary}; fallback(no-status): ${reason}` }
+          }
+        }
       }
 
-      if (!this.listId) return { ok: false, created: false }
+      if (!this.listId) return { ok: false, created: false, reason: 'Missing ClickUp listId for create' }
 
       const createResp = await this.requestJson<{ id?: string }>(`/list/${this.listId}/task`, 'POST', body)
-      if (!(createResp.status >= 200 && createResp.status < 300)) return { ok: false, created: true }
+      if (!(createResp.status >= 200 && createResp.status < 300)) return { ok: false, created: true, reason: `HTTP ${createResp.status}` }
       const createdTask = createResp.data || {}
+      if (!createdTask.id) return { ok: false, created: true, reason: 'Create response missing task id' }
       return { ok: true, created: true, clickupId: createdTask.id }
-    } catch {
-      return { ok: false, created: !!clickupId }
+    } catch (e) {
+      return { ok: false, created: !!clickupId, reason: e instanceof Error ? e.message : String(e) }
     }
   }
 

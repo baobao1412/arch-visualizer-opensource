@@ -387,6 +387,20 @@ alwaysApply: false
       return
     }
 
+    let resolvedListId = clickupListId || this.board.tasks.find(t => t.clickupListId)?.clickupListId
+    if (!resolvedListId) {
+      const anyMappedTaskId = this.board.tasks.find(t => t.clickupId)?.clickupId
+      if (anyMappedTaskId) {
+        const discoverSvc = new ClickUpSyncService(clickupToken, undefined, this.obsApp.vault)
+        resolvedListId = await discoverSvc.inferListIdFromTask(anyMappedTaskId)
+      }
+    }
+
+    if (!clickupListId && resolvedListId) {
+      this.plugin.settings.clickupListId = resolvedListId
+      await this.plugin.saveSettings()
+    }
+
     const total = this.board.tasks.length
     if (total === 0) {
       new Notice('No tickets to sync.')
@@ -394,12 +408,17 @@ alwaysApply: false
     }
 
     new Notice(`⬆️ Sync Up ${total} tickets to ClickUp...`)
-    const svc = new ClickUpSyncService(clickupToken, clickupListId, this.obsApp.vault)
+    const svc = new ClickUpSyncService(clickupToken, resolvedListId, this.obsApp.vault)
     try {
-      const { created, updated, failed, commentsSynced } = await svc.pushAllTasksToClickUp(this.board.tasks)
+      const { created, updated, failed, commentsSynced, errorSamples } = await svc.pushAllTasksToClickUp(this.board.tasks)
       await this.writeToDisk()
       this.render()
-      new Notice(`✅ Sync Up done: +${created} created, ~${updated} updated, ${commentsSynced} comments synced, ${failed} failed.`)
+      const msg = `✅ Sync Up done: +${created} created, ~${updated} updated, ${commentsSynced} comments synced, ${failed} failed.`
+      if (failed > 0 && errorSamples.length > 0) {
+        new Notice(`${msg}\nFirst error: ${errorSamples[0]}`, 12000)
+      } else {
+        new Notice(msg)
+      }
     } catch (e) {
       new Notice(`❌ Sync Up failed: ${e instanceof Error ? e.message : String(e)}`)
     }
