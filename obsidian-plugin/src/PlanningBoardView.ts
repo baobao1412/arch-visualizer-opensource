@@ -24,8 +24,9 @@ const COLUMN_COLORS: Record<string, string> = {
 export class PlanningBoardView extends ItemView {
   private board: PlanBoard | null = null
   private currentFile: TFile | null = null
-  private selfWriteFlag = false
-  private selfWriteTimeout: ReturnType<typeof setTimeout> | null = null
+  private pendingSelfWrites = 0
+  private selfWriteGraceUntil = 0
+  private writeQueue: Promise<void> = Promise.resolve()
   private dragTask: TaskCard | null = null
   private graphMode = false
   private lastPinnedNodeId: string | null = null
@@ -39,7 +40,9 @@ export class PlanningBoardView extends ItemView {
   getDisplayText() { return 'Planning Board' }
   getIcon() { return 'kanban' }
 
-  isSelfWrite() { return this.selfWriteFlag }
+  isSelfWrite() {
+    return this.pendingSelfWrites > 0 || Date.now() < this.selfWriteGraceUntil
+  }
 
   async onOpen() { await this.autoLoad() }
   async onClose() { }
@@ -83,11 +86,25 @@ export class PlanningBoardView extends ItemView {
   async writeToDisk() {
     if (!this.currentFile || !this.board) return
     this.synchronizeFeatureRelations()
+    const file = this.currentFile
     const content = serializePlanFile(this.board)
-    this.selfWriteFlag = true
-    if (this.selfWriteTimeout) clearTimeout(this.selfWriteTimeout)
-    this.selfWriteTimeout = setTimeout(() => { this.selfWriteFlag = false }, 2000)
-    await this.obsApp.vault.modify(this.currentFile, content)
+
+    this.writeQueue = this.writeQueue
+      .catch(() => {
+        // Keep queue alive even if a previous write failed.
+      })
+      .then(async () => {
+        this.pendingSelfWrites += 1
+        try {
+          await this.obsApp.vault.modify(file, content)
+        } finally {
+          this.pendingSelfWrites = Math.max(0, this.pendingSelfWrites - 1)
+          // Give modify event listeners a short window to observe this as a self-write.
+          this.selfWriteGraceUntil = Date.now() + 1500
+        }
+      })
+
+    await this.writeQueue
   }
 
   async handleExternalChange(file: TFile) {

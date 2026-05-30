@@ -54,7 +54,7 @@ export default class ArchVisualizerPlanningPlugin extends Plugin {
 
     this.registerEvent(
       this.app.vault.on('modify', (file) => {
-        if (file instanceof TFile && file.path.endsWith('.plan.md') && file.path.startsWith('planning/')) {
+        if (file instanceof TFile && file.path.endsWith('.plan.md')) {
           if (this.planningView && !this.planningView.isSelfWrite()) {
             setTimeout(() => this.planningView?.handleExternalChange(file), 300)
           }
