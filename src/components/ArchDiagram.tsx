@@ -11,6 +11,7 @@ import {
 import ArchNode from './ArchNode';
 import FlowDetail from './FlowDetail';
 import { BASE_NODES, BASE_EDGES, COLUMNS, FLOWS, type FlowDef } from '../data/flows';
+import { readPersist, writePersist } from '../utils/persist';
 
 const nodeTypes = { archNode: ArchNode };
 const ARCH_NODE_POSITIONS_KEY = 'archviz.arch.nodes.v1';
@@ -18,13 +19,7 @@ const ARCH_NODE_POSITIONS_KEY = 'archviz.arch.nodes.v1';
 type StoredPositions = Record<string, { x: number; y: number }>;
 
 function loadStoredPositions(): StoredPositions {
-  if (typeof window === 'undefined') return {};
-  try {
-    const raw = localStorage.getItem(ARCH_NODE_POSITIONS_KEY);
-    return raw ? (JSON.parse(raw) as StoredPositions) : {};
-  } catch {
-    return {};
-  }
+  return readPersist<StoredPositions>(ARCH_NODE_POSITIONS_KEY, {});
 }
 
 interface Props {
@@ -74,7 +69,7 @@ export default function ArchDiagram({ activeFlowId }: Props) {
     for (const node of nodes) {
       nextPositions[node.id] = { x: node.position.x, y: node.position.y };
     }
-    localStorage.setItem(ARCH_NODE_POSITIONS_KEY, JSON.stringify(nextPositions));
+    writePersist(ARCH_NODE_POSITIONS_KEY, nextPositions);
   }, [nodes]);
 
   const edges: Edge[] = useMemo(() => {

@@ -5,6 +5,7 @@ import { TaskForm } from './components/TaskForm'
 import { useBoard } from './hooks/useBoard'
 import { useVscodeMessaging } from './hooks/useVscodeMessaging'
 import type { BriefContent, TaskCard } from './types'
+import { readPersist, writePersist } from '../utils/persist'
 
 const BRIEF_STORAGE_KEY = 'archviz.planning.briefs'
 
@@ -20,12 +21,7 @@ export default function PlanningApp() {
   const [briefLoading, setBriefLoading] = useState(false)
   const [localBriefs, setLocalBriefs] = useState<BriefMap>(() => {
     if (typeof window === 'undefined') return {}
-    try {
-      const raw = localStorage.getItem(BRIEF_STORAGE_KEY)
-      return raw ? (JSON.parse(raw) as BriefMap) : {}
-    } catch {
-      return {}
-    }
+    return readPersist<BriefMap>(BRIEF_STORAGE_KEY, {})
   })
 
   useEffect(() => {
@@ -34,7 +30,7 @@ export default function PlanningApp() {
 
   useEffect(() => {
     if (!isVscode) {
-      localStorage.setItem(BRIEF_STORAGE_KEY, JSON.stringify(localBriefs))
+      writePersist(BRIEF_STORAGE_KEY, localBriefs)
     }
   }, [localBriefs, isVscode])
 

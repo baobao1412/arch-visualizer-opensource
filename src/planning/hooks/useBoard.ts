@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { PlanBoard, TaskCard, TaskComment } from '../types'
+import { readPersist, writePersist } from '../../utils/persist'
 
 type IncomingMessage =
   | { type: 'loadBoard'; board: PlanBoard; filePath: string }
@@ -29,14 +30,8 @@ const DEFAULT_BOARD: PlanBoard = {
 export function useBoard(onMessage: OnMessage, postMessage: PostMessage, isVscode: boolean) {
   const [board, setBoard] = useState<PlanBoard | null>(() => {
     if (isVscode || typeof window === 'undefined') return null
-    try {
-      const raw = localStorage.getItem(LOCAL_STORAGE_KEY)
-      if (!raw) return null
-      const parsed = JSON.parse(raw) as PlanBoard
-      return parsed?.columns?.length ? parsed : null
-    } catch {
-      return null
-    }
+    const parsed = readPersist<PlanBoard | null>(LOCAL_STORAGE_KEY, null)
+    return parsed?.columns?.length ? parsed : null
   })
   const [filePath, setFilePath] = useState<string | null>(() => (
     isVscode ? null : (board ? 'local-storage.plan.md' : null)
@@ -68,7 +63,7 @@ export function useBoard(onMessage: OnMessage, postMessage: PostMessage, isVscod
 
   useEffect(() => {
     if (!isVscode && board) {
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(board))
+      writePersist(LOCAL_STORAGE_KEY, board)
     }
   }, [board, isVscode])
 

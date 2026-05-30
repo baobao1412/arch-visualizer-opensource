@@ -12,6 +12,7 @@ import {
 import type { MermaidBlock } from '../utils/markdownMermaid'
 import MermaidRenderer from './MermaidRenderer'
 import { parseMermaidToFlow, type MermaidFlowEdgeData } from '../utils/mermaidToFlow'
+import { readPersist, writePersist } from '../utils/persist'
 
 interface Props {
   block: MermaidBlock
@@ -24,13 +25,7 @@ function storageKeyForBlock(blockId: string) {
 }
 
 function loadStoredPositions(blockId: string): StoredPositions {
-  if (typeof window === 'undefined') return {}
-  try {
-    const raw = localStorage.getItem(storageKeyForBlock(blockId))
-    return raw ? (JSON.parse(raw) as StoredPositions) : {}
-  } catch {
-    return {}
-  }
+  return readPersist<StoredPositions>(storageKeyForBlock(blockId), {})
 }
 
 // ─── Segmented toggle ────────────────────────────────────────────────────────
@@ -294,7 +289,7 @@ export default function MermaidMainCanvas({ block }: Props) {
     for (const node of nodes) {
       nextPositions[node.id] = { x: node.position.x, y: node.position.y }
     }
-    localStorage.setItem(storageKeyForBlock(block.id), JSON.stringify(nextPositions))
+    writePersist(storageKeyForBlock(block.id), nextPositions)
   }, [block.id, nodes, viewMode])
 
   const linkedNodeIds = useMemo(() => {

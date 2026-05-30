@@ -7,6 +7,7 @@ import MermaidFlowSidebar from './components/MermaidFlowSidebar'
 import PlanningApp from './planning/PlanningApp'
 import { FLOWS, type FlowDef } from './data/flows'
 import type { MermaidBlock } from './utils/markdownMermaid'
+import { readPersist, writePersist } from './utils/persist'
 import './App.css'
 
 const MarkdownDiagramPanel = lazy(() => import('./components/MarkdownDiagramPanel'))
@@ -20,14 +21,7 @@ type AppPersistedState = {
 }
 
 function loadAppState(): AppPersistedState | null {
-  if (typeof window === 'undefined') return null
-  try {
-    const raw = localStorage.getItem(APP_STATE_KEY)
-    if (!raw) return null
-    return JSON.parse(raw) as AppPersistedState
-  } catch {
-    return null
-  }
+  return readPersist<AppPersistedState | null>(APP_STATE_KEY, null)
 }
 
 function restoreOrderedFlows(ids: string[] | undefined) {
@@ -83,7 +77,7 @@ export default function App() {
       orderedFlowIds: orderedFlows.map((flow) => flow.id),
       planningMode,
     }
-    localStorage.setItem(APP_STATE_KEY, JSON.stringify(state))
+    writePersist(APP_STATE_KEY, state)
   }, [activeFlowId, orderedFlows, planningMode])
 
   const modeLabel = planningMode
