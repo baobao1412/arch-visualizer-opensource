@@ -4,6 +4,7 @@ import type ArchVisualizerPlanningPlugin from './main'
 export interface ArchVisualizerSettings {
   clickupToken: string
   clickupListId: string
+  lastPlanFilePath?: string
   graphStateByFile?: Record<string, {
     scale: number
     tx: number
@@ -16,6 +17,7 @@ export interface ArchVisualizerSettings {
 export const DEFAULT_SETTINGS: ArchVisualizerSettings = {
   clickupToken: '',
   clickupListId: '',
+  lastPlanFilePath: '',
   graphStateByFile: {},
 }
 

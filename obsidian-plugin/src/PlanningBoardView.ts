@@ -45,10 +45,21 @@ export class PlanningBoardView extends ItemView {
   async onClose() { }
 
   async autoLoad() {
-    const files = this.obsApp.vault.getFiles().filter(
-      f => f.path.endsWith('.plan.md') && f.path.startsWith('planning/')
-    )
-    if (!files.length) { this.renderEmpty(); return }
+    const rememberedPath = this.plugin.settings.lastPlanFilePath?.trim()
+    if (rememberedPath) {
+      const remembered = this.obsApp.vault.getAbstractFileByPath(rememberedPath)
+      if (remembered instanceof TFile) {
+        await this.loadFile(remembered)
+        return
+      }
+    }
+
+    const files = this.obsApp.vault.getFiles().filter((f) => f.path.endsWith('.plan.md'))
+    if (!files.length) {
+      this.renderEmpty()
+      return
+    }
+
     files.sort((a, b) => b.stat.mtime - a.stat.mtime)
     await this.loadFile(files[0])
   }
@@ -57,8 +68,16 @@ export class PlanningBoardView extends ItemView {
     const content = await this.obsApp.vault.read(file)
     this.board = parsePlanFile(content)
     this.currentFile = file
+    await this.rememberCurrentFilePath()
     this.synchronizeFeatureRelations()
     this.render()
+  }
+
+  private async rememberCurrentFilePath() {
+    if (!this.currentFile) return
+    if (this.plugin.settings.lastPlanFilePath === this.currentFile.path) return
+    this.plugin.settings.lastPlanFilePath = this.currentFile.path
+    await this.plugin.saveSettings()
   }
 
   async writeToDisk() {
@@ -99,8 +118,9 @@ export class PlanningBoardView extends ItemView {
     for (const sub of task.subtasks || []) {
       const text = sub.text || ''
       for (const pattern of patterns) {
-        let m: RegExpExecArray | null = null
-        while ((m = pattern.exec(text)) !== null) {
+        while (true) {
+          const m = pattern.exec(text)
+          if (!m) break
           if (m[1]) refs.add(m[1])
         }
       }
@@ -123,8 +143,8 @@ export class PlanningBoardView extends ItemView {
   }
 
   async createNewPlanFile() {
-    try { await this.obsApp.vault.createFolder('planning') } catch { }
-    try { await this.obsApp.vault.createFolder('planning/briefs') } catch { }
+    try { await this.obsApp.vault.createFolder('planning') } catch { /* folder may already exist */ }
+    try { await this.obsApp.vault.createFolder('planning/briefs') } catch { /* folder may already exist */ }
 
     const defaultBoard: PlanBoard = {
       title: 'Sprint 1',
@@ -133,7 +153,7 @@ export class PlanningBoardView extends ItemView {
     }
     const content = serializePlanFile(defaultBoard)
     const filePath = 'planning/sprint.plan.md'
-    let file = this.obsApp.vault.getAbstractFileByPath(filePath)
+    const file = this.obsApp.vault.getAbstractFileByPath(filePath)
     if (file instanceof TFile) {
       await this.loadFile(file)
     } else {
@@ -256,10 +276,14 @@ alwaysApply: false
     for (const [path, content] of writes) {
       try {
         const dir = path.includes('/') ? path.substring(0, path.lastIndexOf('/')) : null
-        if (dir) { try { await this.obsApp.vault.createFolder(dir) } catch { } }
+        if (dir) {
+          try { await this.obsApp.vault.createFolder(dir) } catch { /* folder may already exist */ }
+        }
         const existing = this.obsApp.vault.getAbstractFileByPath(path)
         if (!existing) await this.obsApp.vault.create(path, content)
-      } catch { }
+      } catch {
+        // Ignore convention-file write errors to keep plan creation non-blocking.
+      }
     }
     new Notice('✅ Created plan file + AI convention files (.instructions.md, CLAUDE.md, etc.)')
   }
@@ -337,7 +361,7 @@ alwaysApply: false
   }
 
   async generateReworkPrompt(task: TaskCard) {
-    try { await this.obsApp.vault.createFolder('rework') } catch { }
+    try { await this.obsApp.vault.createFolder('rework') } catch { /* folder may already exist */ }
     const reviewComments = (task.comments || []).filter(c => c.type === 'review' || c.type === 'rework')
     const commentBlock = reviewComments.length
       ? reviewComments.map(c => `### ${c.author} (${new Date(c.timestamp).toLocaleString()})\n${c.text}`).join('\n\n')
@@ -378,7 +402,7 @@ Based on the review feedback above, please:
     if (existing instanceof TFile) await this.obsApp.vault.modify(existing, content)
     else await this.obsApp.vault.create(path, content)
 
-    const notice = new Notice(`🔄 Rework prompt saved: rework/${task.id}.rework.md`, 8000)
+    new Notice(`🔄 Rework prompt saved: rework/${task.id}.rework.md`, 8000)
     // Add clickable "Open" action via notice
     void this.obsApp.workspace.openLinkText(`${task.id}.rework`, path)
     return path
@@ -1143,9 +1167,9 @@ Based on the review feedback above, please:
   private async generateBriefTemplate(task: TaskCard) {
     const briefPath = `planning/briefs/${task.id}.md`
     if (this.obsApp.vault.getAbstractFileByPath(briefPath) instanceof TFile) return
-    try { await this.obsApp.vault.createFolder('planning/briefs') } catch { }
+    try { await this.obsApp.vault.createFolder('planning/briefs') } catch { /* folder may already exist */ }
     const brief = `# ${task.title}\n\n## Context\n\n\n## Expected Output\n\n\n## Acceptance Criteria\n- [ ] \n\n## Technical Notes\n\n\n## Rules & Format\n\n`
-    try { await this.obsApp.vault.create(briefPath, brief) } catch { }
+    try { await this.obsApp.vault.create(briefPath, brief) } catch { /* file may already exist */ }
   }
 
   async readBrief(taskId: string): Promise<BriefContent> {
@@ -1182,7 +1206,7 @@ Based on the review feedback above, please:
   async writeBrief(taskId: string, brief: BriefContent) {
     const task = this.board?.tasks.find(t => t.id === taskId)
     const content = `# ${task?.title || taskId}\n\n## Context\n${brief.context}\n\n## Expected Output\n${brief.expectedOutput}\n\n## Acceptance Criteria\n${brief.acceptanceCriteria}\n\n## Technical Notes\n${brief.technicalNotes}\n\n## Rules & Format\n${brief.rulesFormat}\n`
-    try { await this.obsApp.vault.createFolder('planning/briefs') } catch { }
+    try { await this.obsApp.vault.createFolder('planning/briefs') } catch { /* folder may already exist */ }
     const path = `planning/briefs/${taskId}.md`
     const existing = this.obsApp.vault.getAbstractFileByPath(path)
     if (existing instanceof TFile) await this.obsApp.vault.modify(existing, content)
@@ -1247,7 +1271,20 @@ Based on the review feedback above, please:
   private async openExistingPlan() {
     const files = this.obsApp.vault.getFiles().filter(f => f.path.endsWith('.plan.md'))
     if (!files.length) { new Notice('No .plan.md files found.'); return }
-    files.sort((a, b) => b.stat.mtime - a.stat.mtime)
-    await this.loadFile(files[0])
+    let target: TFile
+    const rememberedPath = this.plugin.settings.lastPlanFilePath?.trim()
+    if (rememberedPath) {
+      const remembered = this.obsApp.vault.getAbstractFileByPath(rememberedPath)
+      if (remembered instanceof TFile && remembered.path.endsWith('.plan.md')) {
+        target = remembered
+      } else {
+        files.sort((a, b) => b.stat.mtime - a.stat.mtime)
+        target = files[0]
+      }
+    } else {
+      files.sort((a, b) => b.stat.mtime - a.stat.mtime)
+      target = files[0]
+    }
+    await this.loadFile(target)
   }
 }

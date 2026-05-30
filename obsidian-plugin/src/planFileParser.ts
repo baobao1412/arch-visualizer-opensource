@@ -83,7 +83,13 @@ function parseTaskBlock(block: string, column: string): TaskCard | null {
         case 'deadline': deadline = value.trim(); break
         case 'assignee': assignee = value.trim(); break
         case 'output': output = value.trim(); break
-        case 'comments': try { comments = JSON.parse(value.trim()) } catch { } break
+        case 'comments':
+          try {
+            comments = JSON.parse(value.trim())
+          } catch {
+            // Ignore malformed comment metadata and continue parsing task content.
+          }
+          break
         case 'depends': depends = value.split(',').map((v: string) => v.trim()).filter(Boolean); break
         case 'clickupId': clickupId = value.trim(); break
         case 'clickupListId': clickupListId = value.trim(); break

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import type { BriefContent, Subtask, TaskCard, TaskComment } from '../types'
 
 interface TaskFormProps {
@@ -89,15 +89,6 @@ export function TaskForm({
   const [briefTechnicalNotes,     setBriefTechnicalNotes]     = useState(brief?.technicalNotes     || '')
   const [briefRulesFormat,        setBriefRulesFormat]        = useState(brief?.rulesFormat        || '')
   const [copied, setCopied] = useState(false)
-
-  useEffect(() => {
-    if (!brief) return
-    setBriefContext(brief.context            || '')
-    setBriefExpectedOutput(brief.expectedOutput     || '')
-    setBriefAcceptanceCriteria(brief.acceptanceCriteria || '')
-    setBriefTechnicalNotes(brief.technicalNotes     || '')
-    setBriefRulesFormat(brief.rulesFormat        || '')
-  }, [brief])
 
   const hasBriefContent =
     briefContext.trim()            ||

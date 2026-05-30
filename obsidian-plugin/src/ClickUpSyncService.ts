@@ -1,4 +1,4 @@
-import { Vault, TFile, Notice, requestUrl } from 'obsidian'
+import { Vault, TFile, requestUrl } from 'obsidian'
 import { TaskCard, PlanBoard, TaskComment } from './types'
 
 const CU_STATUS_TO_LOCAL: Record<string, string> = {
@@ -78,7 +78,7 @@ export class ClickUpSyncService {
     // Users sometimes paste token with spaces/quotes/newlines from settings dialogs.
     this.authToken = (token || '')
       .trim()
-      .replace(/^['\"]+|['\"]+$/g, '')
+      .replace(/^['"]+|['"]+$/g, '')
       .replace(/\s+/g, '')
   }
 
@@ -101,7 +101,7 @@ export class ClickUpSyncService {
       return { board, ...result, errors: [msg] }
     }
 
-    try { await this.vault.createFolder('planning/briefs') } catch { }
+    try { await this.vault.createFolder('planning/briefs') } catch { /* folder may already exist */ }
 
     const seenRemoteIds = new Set<string>()
 
@@ -494,7 +494,7 @@ export class ClickUpSyncService {
     if (existing instanceof TFile) {
       await this.vault.modify(existing, content)
     } else {
-      try { await this.vault.create(briefPath, content) } catch { }
+      try { await this.vault.create(briefPath, content) } catch { /* file may already exist */ }
     }
   }
 

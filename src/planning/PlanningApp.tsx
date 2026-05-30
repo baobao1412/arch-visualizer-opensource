@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from 'react'
 import { KanbanBoard } from './components/KanbanBoard'
 import { EmptyState } from './components/EmptyState'
 import { TaskForm } from './components/TaskForm'
-import DependencyGraph from './components/DependencyGraph'
 import { useBoard } from './hooks/useBoard'
 import { useVscodeMessaging } from './hooks/useVscodeMessaging'
 import type { BriefContent, TaskCard } from './types'
@@ -19,21 +18,18 @@ export default function PlanningApp() {
   const [createColumn, setCreateColumn] = useState('')
   const [currentBrief, setCurrentBrief] = useState<BriefContent | null>(null)
   const [briefLoading, setBriefLoading] = useState(false)
-  const [localBriefs, setLocalBriefs] = useState<BriefMap>({})
-  const [graphMode, setGraphMode] = useState(false)
+  const [localBriefs, setLocalBriefs] = useState<BriefMap>(() => {
+    if (typeof window === 'undefined') return {}
+    try {
+      const raw = localStorage.getItem(BRIEF_STORAGE_KEY)
+      return raw ? (JSON.parse(raw) as BriefMap) : {}
+    } catch {
+      return {}
+    }
+  })
 
   useEffect(() => {
-    if (!isVscode) {
-      try {
-        const raw = localStorage.getItem(BRIEF_STORAGE_KEY)
-        if (raw) setLocalBriefs(JSON.parse(raw) as BriefMap)
-      } catch {
-        // no-op
-      }
-      return
-    }
-
-    postMessage({ type: 'ready' })
+    if (isVscode) postMessage({ type: 'ready' })
   }, [isVscode, postMessage])
 
   useEffect(() => {
@@ -175,13 +171,6 @@ export default function PlanningApp() {
           </span>
         )}
         <div className="planning-header-spacer" />
-        <button
-          className="planning-view-toggle"
-          onClick={() => setGraphMode(m => !m)}
-          title={graphMode ? 'Switch to Board view' : 'Switch to Dependency Graph'}
-        >
-          {graphMode ? '📋 Board' : '📊 Graph'}
-        </button>
         {filePath ? (
           <span className="planning-filepath" title={filePath}>
             {filePath.split(/[/\\]/).pop()}
@@ -190,21 +179,18 @@ export default function PlanningApp() {
         <span className="planning-sync-dot" title="Synced" />
       </div>
 
-      {graphMode ? (
-        <DependencyGraph board={board} onEditTask={handleEditTask} />
-      ) : (
-        <KanbanBoard
-          board={board}
-          onMoveTask={(taskId, toColumn, insertIndex) => dispatch({ type: 'moveTask', taskId, toColumn, insertIndex })}
-          onReorderTask={(taskId, insertIndex) => dispatch({ type: 'reorderTask', taskId, insertIndex })}
-          onEditTask={handleEditTask}
-          onCreateTask={handleCreateTask}
-          onToggleSubtask={handleToggleSubtask}
-        />
-      )}
+      <KanbanBoard
+        board={board}
+        onMoveTask={(taskId, toColumn, insertIndex) => dispatch({ type: 'moveTask', taskId, toColumn, insertIndex })}
+        onReorderTask={(taskId, insertIndex) => dispatch({ type: 'reorderTask', taskId, insertIndex })}
+        onEditTask={handleEditTask}
+        onCreateTask={handleCreateTask}
+        onToggleSubtask={handleToggleSubtask}
+      />
 
       {isCreating || editingTask ? (
         <TaskForm
+          key={`${editingTask?.id || 'new'}:${currentBrief ? 'brief' : 'nobrief'}`}
           task={editingTask}
           defaultColumn={createColumn || board.columns[0]}
           columns={board.columns}

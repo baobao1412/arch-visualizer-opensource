@@ -27,24 +27,20 @@ const DEFAULT_BOARD: PlanBoard = {
 }
 
 export function useBoard(onMessage: OnMessage, postMessage: PostMessage, isVscode: boolean) {
-  const [board, setBoard] = useState<PlanBoard | null>(null)
-  const [filePath, setFilePath] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (isVscode) return
-
+  const [board, setBoard] = useState<PlanBoard | null>(() => {
+    if (isVscode || typeof window === 'undefined') return null
     try {
       const raw = localStorage.getItem(LOCAL_STORAGE_KEY)
-      if (!raw) return
+      if (!raw) return null
       const parsed = JSON.parse(raw) as PlanBoard
-      if (parsed?.columns?.length) {
-        setBoard(parsed)
-        setFilePath('local-storage.plan.md')
-      }
+      return parsed?.columns?.length ? parsed : null
     } catch {
-      // no-op
+      return null
     }
-  }, [isVscode])
+  })
+  const [filePath, setFilePath] = useState<string | null>(() => (
+    isVscode ? null : (board ? 'local-storage.plan.md' : null)
+  ))
 
   useEffect(() => {
     return onMessage((msg: unknown) => {

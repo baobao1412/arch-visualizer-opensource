@@ -1,12 +1,12 @@
 import { App, Modal, Setting, TextComponent, DropdownComponent } from 'obsidian'
-import { TaskCard, BriefContent, Subtask, TaskComment } from './types'
+import { TaskCard, BriefContent, TaskComment } from './types'
 
 export class TaskModal extends Modal {
   private task: TaskCard
   private columns: string[]
   private isNew: boolean
-  private onSave: (task: TaskCard) => void
-  private onDelete?: (taskId: string) => void
+  private onSave: (task: TaskCard) => Promise<void> | void
+  private onDelete?: (taskId: string) => Promise<void> | void
   private onLoadBrief?: (taskId: string) => Promise<BriefContent>
   private onSaveBrief?: (taskId: string, brief: BriefContent) => Promise<void>
   private onTriggerRework?: (task: TaskCard) => Promise<string | void>
@@ -17,8 +17,8 @@ export class TaskModal extends Modal {
     task: TaskCard,
     columns: string[],
     isNew: boolean,
-    onSave: (task: TaskCard) => void,
-    onDelete?: (taskId: string) => void,
+    onSave: (task: TaskCard) => Promise<void> | void,
+    onDelete?: (taskId: string) => Promise<void> | void,
     onLoadBrief?: (taskId: string) => Promise<BriefContent>,
     onSaveBrief?: (taskId: string, brief: BriefContent) => Promise<void>,
     onTriggerRework?: (task: TaskCard) => Promise<string | void>,
@@ -82,16 +82,31 @@ export class TaskModal extends Modal {
     const actions = contentEl.createDiv({ cls: 'av-modal-actions' })
     const saveBtn = actions.createEl('button', { text: this.isNew ? 'Create' : 'Save', cls: 'mod-cta' })
     saveBtn.addEventListener('click', async () => {
-      this.onSave(this.task)
-      if (this.briefContent && this.onSaveBrief && !this.isNew) {
-        await this.onSaveBrief(this.task.id, this.briefContent)
+      if (saveBtn.disabled) return
+      saveBtn.disabled = true
+      try {
+        await this.onSave(this.task)
+        if (this.briefContent && this.onSaveBrief && !this.isNew) {
+          await this.onSaveBrief(this.task.id, this.briefContent)
+        }
+        this.close()
+      } finally {
+        saveBtn.disabled = false
       }
-      this.close()
     })
 
     if (!this.isNew && this.onDelete) {
       const deleteBtn = actions.createEl('button', { text: 'Delete', cls: 'mod-warning' })
-      deleteBtn.addEventListener('click', () => { this.onDelete!(this.task.id); this.close() })
+      deleteBtn.addEventListener('click', async () => {
+        if (deleteBtn.disabled) return
+        deleteBtn.disabled = true
+        try {
+          await this.onDelete!(this.task.id)
+          this.close()
+        } finally {
+          deleteBtn.disabled = false
+        }
+      })
     }
 
     actions.createEl('button', { text: 'Cancel' }).addEventListener('click', () => this.close())
