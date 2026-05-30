@@ -226,20 +226,65 @@ alwaysApply: false
   async syncClickUp() {
     if (!this.board) { new Notice('No plan loaded.'); return }
     const { clickupToken, clickupListId } = this.plugin.settings
-    if (!clickupToken || !clickupListId) {
-      new Notice('⚙️ Configure ClickUp token and list ID in Settings → Arch Visualizer.')
+    if (!clickupToken) {
+      new Notice('⚙️ Configure ClickUp token in Settings → Arch Visualizer.')
       return
     }
+
+    let resolvedListId = clickupListId || this.board.tasks.find(t => t.clickupListId)?.clickupListId
+    if (!resolvedListId) {
+      const anyMappedTaskId = this.board.tasks.find(t => t.clickupId)?.clickupId
+      if (anyMappedTaskId) {
+        const discoverSvc = new ClickUpSyncService(clickupToken, undefined, this.obsApp.vault)
+        resolvedListId = await discoverSvc.inferListIdFromTask(anyMappedTaskId)
+      }
+    }
+
+    if (!clickupListId && resolvedListId) {
+      this.plugin.settings.clickupListId = resolvedListId
+      await this.plugin.saveSettings()
+    }
+
     new Notice('🔄 Syncing with ClickUp...')
-    const svc = new ClickUpSyncService(clickupToken, clickupListId, this.obsApp.vault)
+    const svc = new ClickUpSyncService(clickupToken, resolvedListId, this.obsApp.vault)
     try {
-      const { board, added, updated, briefs } = await svc.pullFromClickUp(this.board)
+      const { board, added, updated, removed, briefs, errors } = await svc.pullFromClickUp(this.board)
+      if (errors.length) {
+        new Notice(`❌ Sync failed: ${errors[0]}`)
+        return
+      }
       this.board = board
       await this.writeToDisk()
       this.render()
-      new Notice(`✅ ClickUp sync done: +${added} new, ~${updated} updated, ${briefs} briefs written.`)
+      new Notice(`✅ ClickUp sync done: +${added} new, ~${updated} updated, -${removed} removed, ${briefs} briefs written.`)
     } catch (e) {
       new Notice(`❌ Sync failed: ${e instanceof Error ? e.message : String(e)}`)
+    }
+  }
+
+  async syncUpClickUp() {
+    if (!this.board) { new Notice('No plan loaded.'); return }
+    const { clickupToken, clickupListId } = this.plugin.settings
+    if (!clickupToken) {
+      new Notice('⚙️ Configure ClickUp token in Settings → Arch Visualizer.')
+      return
+    }
+
+    const total = this.board.tasks.length
+    if (total === 0) {
+      new Notice('No tickets to sync.')
+      return
+    }
+
+    new Notice(`⬆️ Sync Up ${total} tickets to ClickUp...`)
+    const svc = new ClickUpSyncService(clickupToken, clickupListId, this.obsApp.vault)
+    try {
+      const { created, updated, failed, commentsSynced } = await svc.pushAllTasksToClickUp(this.board.tasks)
+      await this.writeToDisk()
+      this.render()
+      new Notice(`✅ Sync Up done: +${created} created, ~${updated} updated, ${commentsSynced} comments synced, ${failed} failed.`)
+    } catch (e) {
+      new Notice(`❌ Sync Up failed: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
 
@@ -317,8 +362,18 @@ Based on the review feedback above, please:
     graphBtn.addEventListener('click', () => { this.graphMode = !this.graphMode; this.render() })
     const openBtn = headerRight.createEl('button', { cls: 'av-header-btn', text: '📄 Open File', attr: { title: 'Open plan file in editor' } })
     openBtn.addEventListener('click', () => void this.openCurrentPlanFile())
-    const syncBtn = headerRight.createEl('button', { cls: 'av-header-btn av-sync-btn', text: '☁ Sync ClickUp', attr: { title: 'Sync with ClickUp' } })
-    syncBtn.addEventListener('click', () => void this.syncClickUp())
+    const syncDownBtn = headerRight.createEl('button', {
+      cls: 'av-header-btn av-sync-btn',
+      text: '⬇ Sync Down',
+      attr: { title: 'Pull tickets from ClickUp' }
+    })
+    syncDownBtn.addEventListener('click', () => void this.syncClickUp())
+    const syncUpBtn = headerRight.createEl('button', {
+      cls: 'av-header-btn av-sync-btn',
+      text: '⬆ Sync Up',
+      attr: { title: 'Push all board tickets to ClickUp' }
+    })
+    syncUpBtn.addEventListener('click', () => void this.syncUpClickUp())
 
     if (this.graphMode) {
       this.renderGraphView(container)
@@ -340,12 +395,11 @@ Based on the review feedback above, please:
   private renderGraphView(container: HTMLElement) {
     if (!this.board) return
 
-    const NODE_W = 200
-    const NODE_H = 105
-    const H_GAP  = 72
-    const V_GAP  = 16
-    const PAD_TOP = 52
-    const PAD_LEFT = 16
+    const PAD_TOP = 36
+    const PAD_LEFT = 24
+    const PAD_RIGHT = 24
+    const PAD_BOTTOM = 24
+    const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(n, max))
 
     // Group tasks per column
     const grouped: Map<string, TaskCard[]> = new Map()
@@ -356,29 +410,173 @@ Based on the review feedback above, please:
       else grouped.set(task.column, [task])
     }
 
-    // Calculate positions
-    const pos: Record<string, { x: number; y: number }> = {}
-    let colIdx = 0
-    for (const col of this.board.columns) {
-      const tasks = grouped.get(col) || []
-      tasks.forEach((task, rowIdx) => {
-        pos[task.id] = {
-          x: PAD_LEFT + colIdx * (NODE_W + H_GAP),
-          y: PAD_TOP + rowIdx * (NODE_H + V_GAP),
-        }
-      })
-      colIdx++
+    const nodeSize: Record<string, number> = {}
+    for (const task of this.board.tasks) {
+      const textLength = `${task.title} ${task.description || ''} ${task.assignee || ''}`.trim().length
+      const density = Math.ceil(textLength / 28)
+      nodeSize[task.id] = clamp(76 + density * 6, 82, 126)
     }
 
     const totalCols = this.board.columns.length
     const maxRows = Math.max(...Array.from(grouped.values()).map(a => a.length), 1)
-    const canvasW = PAD_LEFT * 2 + totalCols * (NODE_W + H_GAP)
-    const canvasH = PAD_TOP + maxRows * (NODE_H + V_GAP) + 24
+    const viewportW = Math.max(container.clientWidth - 20, 980)
+    const viewportH = Math.max(container.clientHeight - 56, 640)
+    const canvasW = Math.max(viewportW, PAD_LEFT + PAD_RIGHT + totalCols * 220)
+    const canvasH = Math.max(viewportH, PAD_TOP + PAD_BOTTOM + maxRows * 180)
 
-    const wrapper = container.createDiv({ cls: 'av-graph-wrapper' })
-    const canvas = wrapper.createDiv({ cls: 'av-graph-canvas' })
+    const pos: Record<string, { x: number; y: number }> = {}
+    const colSpan = Math.max(canvasW - PAD_LEFT - PAD_RIGHT, 1)
+    const availableH = Math.max(canvasH - PAD_TOP - PAD_BOTTOM, 1)
+    for (let i = 0; i < this.board.columns.length; i++) {
+      const col = this.board.columns[i]
+      const tasks = grouped.get(col) || []
+      const colCenterX = this.board.columns.length === 1
+        ? canvasW / 2
+        : PAD_LEFT + (colSpan * i) / (this.board.columns.length - 1)
+
+      tasks.forEach((task, rowIdx) => {
+        const y = PAD_TOP + (availableH * (rowIdx + 1)) / (tasks.length + 1)
+        const jitterX = ((rowIdx % 2) * 2 - 1) * 16
+        pos[task.id] = { x: colCenterX, y }
+        pos[task.id].x = clamp(colCenterX + jitterX, PAD_LEFT + 90, canvasW - PAD_RIGHT - 90)
+      })
+    }
+
+    // Prevent heavy overlap by applying a lightweight collision relaxation pass.
+    const taskIds = this.board.tasks.map(t => t.id)
+    for (let iter = 0; iter < 120; iter++) {
+      let moved = false
+      for (let i = 0; i < taskIds.length; i++) {
+        for (let j = i + 1; j < taskIds.length; j++) {
+          const aId = taskIds[i]
+          const bId = taskIds[j]
+          const a = pos[aId]
+          const b = pos[bId]
+          if (!a || !b) continue
+          const ra = (nodeSize[aId] || 220) / 2
+          const rb = (nodeSize[bId] || 220) / 2
+          const minDist = ra + rb + 18
+          const dx = b.x - a.x
+          const dy = b.y - a.y
+          const dist = Math.hypot(dx, dy) || 0.001
+          if (dist >= minDist) continue
+          const push = (minDist - dist) / 2
+          const ux = dx / dist
+          const uy = dy / dist
+
+          a.x -= ux * push
+          a.y -= uy * push
+          b.x += ux * push
+          b.y += uy * push
+
+          const aPad = (nodeSize[aId] || 220) / 2
+          const bPad = (nodeSize[bId] || 220) / 2
+          a.x = clamp(a.x, PAD_LEFT + aPad, canvasW - PAD_RIGHT - aPad)
+          a.y = clamp(a.y, PAD_TOP + aPad, canvasH - PAD_BOTTOM - aPad)
+          b.x = clamp(b.x, PAD_LEFT + bPad, canvasW - PAD_RIGHT - bPad)
+          b.y = clamp(b.y, PAD_TOP + bPad, canvasH - PAD_BOTTOM - bPad)
+          moved = true
+        }
+      }
+      if (!moved) break
+    }
+
+    const wrapper = container.createDiv({ cls: 'av-graph-wrapper av-graph-minimal' })
+    const viewport = wrapper.createDiv({ cls: 'av-graph-viewport' })
+
+    const canvas = viewport.createDiv({ cls: 'av-graph-canvas' })
     canvas.style.width = `${canvasW}px`
     canvas.style.height = `${canvasH}px`
+    canvas.style.transformOrigin = '0 0'
+
+    const viewState = {
+      scale: 1,
+      tx: 0,
+      ty: 0,
+      isPanning: false,
+      panStartX: 0,
+      panStartY: 0,
+      startTx: 0,
+      startTy: 0,
+    }
+
+    const clampView = () => {
+      const vw = viewport.clientWidth || 1
+      const vh = viewport.clientHeight || 1
+      const scaledW = canvasW * viewState.scale
+      const scaledH = canvasH * viewState.scale
+      const minTx = Math.min(0, vw - scaledW - 20)
+      const minTy = Math.min(0, vh - scaledH - 20)
+      const maxTx = Math.max(20, vw - scaledW + 20)
+      const maxTy = Math.max(20, vh - scaledH + 20)
+      viewState.tx = Math.max(minTx, Math.min(maxTx, viewState.tx))
+      viewState.ty = Math.max(minTy, Math.min(maxTy, viewState.ty))
+    }
+
+    const applyViewTransform = () => {
+      clampView()
+      canvas.style.transform = `translate(${viewState.tx}px, ${viewState.ty}px) scale(${viewState.scale})`
+    }
+
+    const centerOnNode = (taskId: string | null, animate = true) => {
+      if (!taskId) return
+      const p = pos[taskId]
+      if (!p) return
+      const targetTx = viewport.clientWidth / 2 - p.x * viewState.scale
+      const targetTy = viewport.clientHeight / 2 - p.y * viewState.scale
+      viewState.tx = targetTx
+      viewState.ty = targetTy
+      canvas.style.transition = animate ? 'transform 180ms ease' : ''
+      applyViewTransform()
+      if (animate) setTimeout(() => { canvas.style.transition = '' }, 220)
+    }
+
+    viewport.addEventListener('wheel', (ev: WheelEvent) => {
+      ev.preventDefault()
+      const rect = viewport.getBoundingClientRect()
+      const px = ev.clientX - rect.left
+      const py = ev.clientY - rect.top
+      const beforeX = (px - viewState.tx) / viewState.scale
+      const beforeY = (py - viewState.ty) / viewState.scale
+      const zoomFactor = ev.deltaY < 0 ? 1.12 : 0.89
+      viewState.scale = clamp(viewState.scale * zoomFactor, 0.35, 2.8)
+      viewState.tx = px - beforeX * viewState.scale
+      viewState.ty = py - beforeY * viewState.scale
+      applyViewTransform()
+    }, { passive: false })
+
+    viewport.addEventListener('pointerdown', (ev: PointerEvent) => {
+      const target = ev.target as HTMLElement
+      if (target.closest('.av-graph-node')) return
+      viewState.isPanning = true
+      viewState.panStartX = ev.clientX
+      viewState.panStartY = ev.clientY
+      viewState.startTx = viewState.tx
+      viewState.startTy = viewState.ty
+      viewport.classList.add('is-panning')
+      viewport.setPointerCapture(ev.pointerId)
+    })
+
+    viewport.addEventListener('pointermove', (ev: PointerEvent) => {
+      if (!viewState.isPanning) return
+      viewState.tx = viewState.startTx + (ev.clientX - viewState.panStartX)
+      viewState.ty = viewState.startTy + (ev.clientY - viewState.panStartY)
+      applyViewTransform()
+    })
+
+    viewport.addEventListener('pointerup', (ev: PointerEvent) => {
+      if (!viewState.isPanning) return
+      viewState.isPanning = false
+      viewport.classList.remove('is-panning')
+      if (viewport.hasPointerCapture(ev.pointerId)) viewport.releasePointerCapture(ev.pointerId)
+    })
+
+    viewport.addEventListener('dblclick', () => {
+      viewState.scale = 1
+      viewState.tx = 0
+      viewState.ty = 0
+      applyViewTransform()
+    })
 
     // SVG edge layer
     const svgNS = 'http://www.w3.org/2000/svg'
@@ -390,6 +588,14 @@ Based on the review feedback above, please:
 
     // Arrowhead marker
     const defs = document.createElementNS(svgNS, 'defs')
+    const glow = document.createElementNS(svgNS, 'filter')
+    glow.setAttribute('id', 'av-edge-glow')
+    const blur = document.createElementNS(svgNS, 'feGaussianBlur')
+    blur.setAttribute('stdDeviation', '1.8')
+    blur.setAttribute('result', 'coloredBlur')
+    glow.appendChild(blur)
+    defs.appendChild(glow)
+
     const marker = document.createElementNS(svgNS, 'marker')
     marker.setAttribute('id', 'av-arrow')
     marker.setAttribute('markerWidth', '9')
@@ -399,92 +605,200 @@ Based on the review feedback above, please:
     marker.setAttribute('orient', 'auto')
     const poly = document.createElementNS(svgNS, 'polygon')
     poly.setAttribute('points', '0 0, 9 3.5, 0 7')
-    poly.setAttribute('fill', 'rgba(167,139,250,0.75)')
+    poly.setAttribute('fill', 'rgba(203, 231, 255, 0.82)')
     marker.appendChild(poly)
     defs.appendChild(marker)
     svg.appendChild(defs)
 
-    // Draw edges
+    const edgeLayer = document.createElementNS(svgNS, 'g')
+    svg.appendChild(edgeLayer)
+    const nodeById = new Map<string, HTMLElement>()
+    let focusNodeId: string | null = null
+    let pinnedNodeId: string | null = null
+
+    const edges: Array<{ fromId: string; toId: string }> = []
     for (const task of this.board.tasks) {
-      for (const depId of (task.depends || [])) {
-        const from = pos[depId]
-        const to = pos[task.id]
-        if (!from || !to) continue
-        const x1 = from.x + NODE_W
-        const y1 = from.y + NODE_H / 2
-        const x2 = to.x
-        const y2 = to.y + NODE_H / 2
-        const cx = (x1 + x2) / 2
-        const path = document.createElementNS(svgNS, 'path')
-        path.setAttribute('d', `M ${x1} ${y1} C ${cx} ${y1}, ${cx} ${y2}, ${x2} ${y2}`)
-        path.setAttribute('stroke', 'rgba(167,139,250,0.5)')
-        path.setAttribute('stroke-width', '1.5')
-        path.setAttribute('fill', 'none')
-        path.setAttribute('marker-end', 'url(#av-arrow)')
-        svg.appendChild(path)
+      for (const depId of (task.depends || [])) edges.push({ fromId: depId, toId: task.id })
+    }
+
+    // If no explicit dependencies exist, infer lightweight flow links across adjacent columns.
+    if (edges.length === 0) {
+      for (let i = 0; i < this.board.columns.length - 1; i++) {
+        const fromTasks = grouped.get(this.board.columns[i]) || []
+        const toTasks = grouped.get(this.board.columns[i + 1]) || []
+        const count = Math.min(fromTasks.length, toTasks.length)
+        for (let j = 0; j < count; j++) {
+          edges.push({ fromId: fromTasks[j].id, toId: toTasks[j].id })
+        }
+      }
+      if (edges.length === 0 && this.board.tasks.length > 1) {
+        for (let i = 0; i < this.board.tasks.length - 1; i++) {
+          edges.push({ fromId: this.board.tasks[i].id, toId: this.board.tasks[i + 1].id })
+        }
       }
     }
-    canvas.appendChild(svg)
 
-    // Column labels row
-    for (const [colName, _tasks] of grouped.entries()) {
-      const idx = this.board.columns.indexOf(colName)
-      if (idx === -1) continue
-      const colColor = COLUMN_COLORS[colName.toLowerCase()] || '#9e9e9e'
-      const label = canvas.createDiv({ cls: 'av-graph-col-label' })
-      label.style.cssText = `position:absolute;top:10px;left:${PAD_LEFT + idx * (NODE_W + H_GAP)}px;width:${NODE_W}px;`
-      const dot = label.createDiv({ cls: 'av-graph-col-dot' })
-      dot.style.cssText = `background:${colColor};box-shadow:0 0 6px ${colColor};`
-      label.createEl('span', { text: `${colName} (${(_tasks).length})` })
-      label.style.color = colColor
+    const redrawEdges = () => {
+      edgeLayer.replaceChildren()
+      for (const edge of edges) {
+        const from = pos[edge.fromId]
+        const to = pos[edge.toId]
+        if (!from || !to) continue
+        const x1 = from.x
+        const y1 = from.y
+        const x2 = to.x
+        const y2 = to.y
+        const cx = (x1 + x2) / 2
+        const cy = (y1 + y2) / 2 - (Math.abs(x1 - x2) > 80 ? 24 : 10)
+
+        const glowPath = document.createElementNS(svgNS, 'path')
+        glowPath.setAttribute('d', `M ${x1} ${y1} Q ${cx} ${cy}, ${x2} ${y2}`)
+        glowPath.setAttribute('stroke', 'rgba(180,230,255,0.28)')
+        glowPath.setAttribute('stroke-width', '3')
+        glowPath.setAttribute('fill', 'none')
+        glowPath.setAttribute('filter', 'url(#av-edge-glow)')
+        glowPath.setAttribute('class', 'av-graph-edge av-graph-edge-glow')
+        edgeLayer.appendChild(glowPath)
+
+        const path = document.createElementNS(svgNS, 'path')
+        path.setAttribute('d', `M ${x1} ${y1} Q ${cx} ${cy}, ${x2} ${y2}`)
+        path.setAttribute('stroke', 'rgba(164, 178, 201, 0.45)')
+        path.setAttribute('stroke-width', '1')
+        path.setAttribute('fill', 'none')
+        path.setAttribute('marker-end', 'url(#av-arrow)')
+        path.setAttribute('class', 'av-graph-edge av-graph-edge-line')
+
+        const isRelated = !!focusNodeId && (edge.fromId === focusNodeId || edge.toId === focusNodeId)
+        if (focusNodeId) {
+          path.classList.toggle('is-active', isRelated)
+          glowPath.classList.toggle('is-active', isRelated)
+          path.classList.toggle('is-muted', !isRelated)
+          glowPath.classList.toggle('is-muted', !isRelated)
+        }
+
+        edgeLayer.appendChild(path)
+      }
     }
+
+    const refreshNodeFocus = () => {
+      nodeById.forEach((nodeEl, taskId) => {
+        const active = !!focusNodeId && taskId === focusNodeId
+        const related = !!focusNodeId && edges.some(e => (e.fromId === focusNodeId && e.toId === taskId) || (e.toId === focusNodeId && e.fromId === taskId))
+        nodeEl.classList.toggle('is-focus', active)
+        nodeEl.classList.toggle('is-related', related)
+        nodeEl.classList.toggle('is-muted', !!focusNodeId && !active && !related)
+      })
+    }
+
+    const applyFocus = (nodeId: string | null) => {
+      focusNodeId = nodeId
+      redrawEdges()
+      refreshNodeFocus()
+      if (nodeId) centerOnNode(nodeId)
+    }
+
+    redrawEdges()
+    canvas.appendChild(svg)
 
     // Task nodes
     for (const task of this.board.tasks) {
       const p = pos[task.id]
       if (!p) continue
       const colColor = COLUMN_COLORS[task.column.toLowerCase()] || '#9e9e9e'
-      const priorityColor = PRIORITY_COLORS[task.priority] || '#475569'
+      const size = nodeSize[task.id] || 160
 
-      const node = canvas.createDiv({ cls: 'av-graph-node' })
-      node.style.cssText = `position:absolute;left:${p.x}px;top:${p.y}px;width:${NODE_W}px;`
+      const node = canvas.createDiv({ cls: 'av-graph-node av-graph-node-circle av-graph-node-mini' })
+      node.style.cssText = `position:absolute;left:${p.x - size / 2}px;top:${p.y - size / 2}px;width:${size}px;height:${size}px;`
       node.style.setProperty('--col-color', colColor)
-      node.style.setProperty('--priority-color', priorityColor)
-      node.addEventListener('click', () => void this.openEditTask(task))
+      node.style.setProperty('--node-accent', `${colColor}66`)
+      node.style.setProperty('--node-fill', `${colColor}22`)
+      node.style.setProperty('--node-border', `${colColor}99`)
+      node.style.setProperty('--node-ring', `${colColor}33`)
+      nodeById.set(task.id, node)
 
-      const inner = node.createDiv({ cls: 'av-graph-node-inner' })
+      const inner = node.createDiv({ cls: 'av-graph-node-inner av-graph-node-glass' })
+      inner.style.borderRadius = '999px'
 
-      // Top row
-      const topRow = inner.createDiv({ cls: 'av-graph-node-top' })
-      topRow.createEl('span', { cls: 'av-task-id', text: task.id })
-      topRow.createEl('span', { cls: `av-task-tag av-priority-tag av-priority-${task.priority}`, text: task.priority })
+      const info = inner.createDiv({ cls: 'av-graph-node-info' })
+      info.createEl('div', { cls: 'av-graph-node-idonly', text: task.id })
+      info.createEl('div', { cls: 'av-graph-node-title', text: task.title })
 
-      inner.createEl('div', { cls: 'av-graph-node-title', text: task.title })
-
-      // Description preview
-      if (task.description?.trim()) {
-        inner.createEl('div', { cls: 'av-graph-node-desc', text: task.description.slice(0, 80) + (task.description.length > 80 ? '…' : '') })
+      const details = node.createDiv({ cls: 'av-graph-node-tooltip' })
+      if (p.x > canvasW * 0.62) details.addClass('av-graph-node-tooltip-left')
+      details.createEl('div', { cls: 'av-graph-tooltip-title', text: `${task.id} — ${task.title}` })
+      const fields = details.createDiv({ cls: 'av-graph-tooltip-fields' })
+      const addField = (label: string, value?: string) => {
+        const row = fields.createDiv({ cls: 'av-graph-tooltip-row' })
+        row.createEl('span', { cls: 'av-graph-tooltip-key', text: label })
+        row.createEl('span', { cls: 'av-graph-tooltip-value', text: value && value.trim() ? value : '-' })
       }
 
-      // Bottom row: column badge + assignee
-      const bottom = inner.createDiv({ cls: 'av-graph-node-bottom' })
-      const badge = bottom.createEl('span', { cls: 'av-graph-col-badge', text: task.column })
-      badge.style.cssText = `color:${colColor};background:${colColor}1a;border:1px solid ${colColor}33;`
-      if (task.assignee) {
-        const avatar = bottom.createDiv({ cls: 'av-graph-node-avatar' })
-        avatar.textContent = task.assignee.replace('@', '').charAt(0).toUpperCase()
-        avatar.title = task.assignee
-      }
-
-      // Dependency count badge
-      const depCount = (task.depends || []).length
+      addField('Column', task.column)
+      addField('Priority', task.priority)
+      addField('Assignee', task.assignee)
+      addField('Deadline', task.deadline)
+      addField('Depends On', (task.depends || []).join(', '))
       const depOf = this.board.tasks.filter(t => (t.depends || []).includes(task.id)).length
-      if (depCount || depOf) {
-        const depBadge = inner.createEl('div', { cls: 'av-graph-node-deps' })
-        if (depCount) depBadge.createEl('span', { text: `↑${depCount} dep` })
-        if (depOf) depBadge.createEl('span', { text: `↓${depOf} blocked` })
-      }
+      addField('Blocked By Count', String(depOf))
+      addField('Subtasks', `${task.subtasks.filter(s => s.done).length}/${task.subtasks.length}`)
+      addField('Comments', String(task.comments?.length || 0))
+      addField('Output', task.output)
+      addField('ClickUp ID', task.clickupId)
+
+      const descBlock = details.createDiv({ cls: 'av-graph-tooltip-desc' })
+      descBlock.createEl('div', { cls: 'av-graph-tooltip-key', text: 'Description' })
+      descBlock.createEl('div', { cls: 'av-graph-tooltip-value av-graph-tooltip-pre', text: task.description || '-' })
+
+      const dragState = { moved: false, startX: 0, startY: 0, offsetX: 0, offsetY: 0 }
+      node.addEventListener('pointerdown', (ev: PointerEvent) => {
+        ev.preventDefault()
+        dragState.moved = false
+        dragState.startX = ev.clientX
+        dragState.startY = ev.clientY
+        dragState.offsetX = ev.clientX - (p.x - size / 2)
+        dragState.offsetY = ev.clientY - (p.y - size / 2)
+        node.classList.add('av-graph-node-dragging')
+        node.setPointerCapture(ev.pointerId)
+        if (!pinnedNodeId) applyFocus(task.id)
+      })
+
+      node.addEventListener('mouseenter', () => {
+        if (!pinnedNodeId) applyFocus(task.id)
+      })
+
+      node.addEventListener('mouseleave', () => {
+        if (!pinnedNodeId) applyFocus(null)
+      })
+
+      node.addEventListener('pointermove', (ev: PointerEvent) => {
+        if (!node.hasPointerCapture(ev.pointerId)) return
+        const nextX = ev.clientX - dragState.offsetX
+        const nextY = ev.clientY - dragState.offsetY
+        if (Math.abs(ev.clientX - dragState.startX) > 3 || Math.abs(ev.clientY - dragState.startY) > 3) {
+          dragState.moved = true
+        }
+        const left = Math.max(0, Math.min(nextX, canvasW - size))
+        const top = Math.max(0, Math.min(nextY, canvasH - size))
+        p.x = left + size / 2
+        p.y = top + size / 2
+        node.style.left = `${left}px`
+        node.style.top = `${top}px`
+        redrawEdges()
+      })
+
+      node.addEventListener('pointerup', (ev: PointerEvent) => {
+        if (node.hasPointerCapture(ev.pointerId)) node.releasePointerCapture(ev.pointerId)
+        node.classList.remove('av-graph-node-dragging')
+        if (!dragState.moved) {
+          pinnedNodeId = pinnedNodeId === task.id ? null : task.id
+          applyFocus(pinnedNodeId)
+          void this.openEditTask(task)
+        }
+      })
     }
+
+    applyFocus(null)
+    applyViewTransform()
 
     // Empty state
     if (!this.board.tasks.length) {
@@ -547,14 +861,11 @@ Based on the review feedback above, please:
 
   private renderTaskCard(parent: HTMLElement, task: TaskCard) {
     const isOverdue = task.deadline && new Date(task.deadline) < new Date()
-    const isDone = task.column.toLowerCase() === 'done'
     const subtasksDone = task.subtasks.filter(s => s.done).length
     const subtasksTotal = task.subtasks.length
 
-    const priorityColor = PRIORITY_COLORS[task.priority] || '#475569'
-
     const card = parent.createDiv({ cls: 'av-task-card' })
-    card.style.setProperty('--priority-color', priorityColor)
+    card.style.setProperty('--priority-color', PRIORITY_COLORS[task.priority] || '#475569')
     card.draggable = true
 
     card.addEventListener('dragstart', (e) => {
@@ -567,6 +878,7 @@ Based on the review feedback above, please:
       card.removeClass('av-task-dragging')
     })
     card.addEventListener('click', () => void this.openEditTask(task))
+
     card.addEventListener('contextmenu', (e) => {
       e.preventDefault()
       const menu = new Menu()
@@ -586,53 +898,25 @@ Based on the review feedback above, please:
       menu.showAtMouseEvent(e)
     })
 
-    // Left priority stripe
+    // Priority bar
     const bar = card.createDiv({ cls: 'av-task-priority-bar' })
-    bar.style.background = priorityColor
+    bar.style.background = PRIORITY_COLORS[task.priority] || '#475569'
 
     const content = card.createDiv({ cls: 'av-task-content' })
-
-    // Top row: circle checkbox + title + priority flag
     const top = content.createDiv({ cls: 'av-task-top' })
+    top.createEl('span', { cls: 'av-task-id', text: task.id })
+    top.createEl('span', { cls: `av-task-tag av-priority-tag av-priority-${task.priority}`, text: task.priority })
 
-    const check = top.createDiv({ cls: `av-task-check${isDone ? ' checked' : ''}` })
-    check.title = isDone ? 'Done' : 'Mark done'
-    check.addEventListener('click', (e) => {
-      e.stopPropagation()
-      if (!this.board) return
-      const doneCols = this.board.columns.filter(c => c.toLowerCase() === 'done')
-      const targetCol = isDone
-        ? (this.board.columns.find(c => c.toLowerCase() === 'in progress' || c.toLowerCase() === 'todo') || this.board.columns[0])
-        : (doneCols[0] || this.board.columns[this.board.columns.length - 1])
-      const colTasks = this.board.tasks.filter(t => t.column === targetCol)
-      void this.moveTask(task, targetCol, colTasks.length)
-    })
+    content.createEl('div', { cls: 'av-task-title', text: task.title })
 
-    top.createEl('span', { cls: 'av-task-title', text: task.title })
-
-    // Priority flag SVG
-    const flagColors: Record<string, string> = { high: '#ef4444', medium: '#f97316', low: '#3b82f6' }
-    const flagColor = flagColors[task.priority] || '#71717a'
-    const flagSvg = top.createEl('svg', { cls: 'av-task-flag', attr: { viewBox: '0 0 14 14', fill: 'none', xmlns: 'http://www.w3.org/2000/svg', title: `Priority: ${task.priority}` } })
-    flagSvg.innerHTML = `<path d="M2 2v10M2 2h8l-2 3 2 3H2" stroke="${flagColor}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>`
-
-    // Meta row: id + assignee + optional context
-    const hasMetaRow = task.assignee || task.id
-    if (hasMetaRow) {
-      const metaRow = content.createDiv({ cls: 'av-task-meta-row' })
-      metaRow.createEl('span', { cls: 'av-task-id', text: task.id })
-      if (task.assignee) {
-        const avatar = metaRow.createDiv({ cls: 'av-task-avatar' })
-        avatar.title = task.assignee
-        avatar.textContent = task.assignee.replace('@', '').charAt(0).toUpperCase()
-        metaRow.createEl('span', { cls: 'av-assignee-name', text: task.assignee })
-      }
-      if (task.deadline) {
-        metaRow.createEl('span', { cls: `av-task-context${isOverdue ? ' av-overdue' : ''}`, text: isOverdue ? `⚠ ${task.deadline}` : task.deadline })
-      }
+    if (task.assignee) {
+      const infoRow = content.createDiv({ cls: 'av-task-info-row' })
+      const avatar = infoRow.createDiv({ cls: 'av-task-avatar' })
+      avatar.title = task.assignee
+      avatar.textContent = task.assignee.replace('@', '').charAt(0).toUpperCase()
+      infoRow.createEl('span', { cls: 'av-assignee-name', text: task.assignee })
     }
 
-    // Subtask progress bar
     if (subtasksTotal > 0) {
       const progress = content.createDiv({ cls: 'av-task-progress' })
       const barEl = progress.createDiv({ cls: 'av-progress-bar' })
@@ -641,15 +925,14 @@ Based on the review feedback above, please:
       progress.createEl('span', { cls: 'av-progress-text', text: `${subtasksDone}/${subtasksTotal}` })
     }
 
-    // Tag chips: brief, milestone, depends, comments
-    const hasChips = task.output || task.milestone || task.depends?.length || task.comments?.length
-    if (hasChips) {
-      const meta = content.createDiv({ cls: 'av-task-meta' })
-      if (task.output) meta.createEl('span', { cls: 'av-task-tag av-brief-tag', text: '📄 brief' })
-      if (task.milestone) meta.createEl('span', { cls: 'av-task-tag av-milestone-tag', text: task.milestone })
-      if (task.depends?.length) meta.createEl('span', { cls: 'av-task-tag av-depends-tag', text: `↳ ${task.depends.length} dep` })
-      if (task.comments?.length) meta.createEl('span', { cls: 'av-task-tag av-comments-tag', text: `💬 ${task.comments.length}` })
+    const meta = content.createDiv({ cls: 'av-task-meta' })
+    if (task.output) meta.createEl('span', { cls: 'av-task-tag av-brief-tag', text: 'brief' })
+    if (task.milestone) meta.createEl('span', { cls: 'av-task-tag av-milestone-tag', text: task.milestone })
+    if (task.deadline) {
+      meta.createEl('span', { cls: `av-task-tag av-deadline-tag${isOverdue ? ' av-overdue' : ''}`, text: task.deadline })
     }
+    if (task.depends?.length) meta.createEl('span', { cls: 'av-task-tag av-depends-tag', text: `↳${task.depends.length}` })
+    if (task.comments?.length) meta.createEl('span', { cls: 'av-task-tag av-comments-tag', text: `💬${task.comments.length}` })
   }
 
   private getDropIndex(taskList: HTMLElement, mouseY: number, draggedId: string, column: string): number {
@@ -685,12 +968,6 @@ Based on the review feedback above, please:
       new Notice(`🔄 Rework: "${task.title}" moved back for revision.`)
       // Generate rework prompt file (non-blocking)
       void this.generateReworkPrompt(this.board.tasks[taskIdx])
-    }
-
-    // Push status to ClickUp if task has clickupId
-    if (task.clickupId && this.plugin.settings.clickupToken) {
-      const svc = new ClickUpSyncService(this.plugin.settings.clickupToken, this.plugin.settings.clickupListId, this.obsApp.vault)
-      void svc.pushTaskToClickUp({ ...task, column: toColumn })
     }
 
     const moved = this.board.tasks.splice(taskIdx, 1)[0]
