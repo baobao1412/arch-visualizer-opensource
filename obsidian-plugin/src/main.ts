@@ -64,13 +64,19 @@ export default class ArchVisualizerPlanningPlugin extends Plugin {
 
     this.registerEvent(
       this.app.vault.on('create', (file) => {
-        if (file instanceof TFile && file.path.endsWith('.plan.md')) this.planningView?.refresh()
+        if (!(file instanceof TFile) || !file.path.endsWith('.plan.md')) return
+        if (!this.planningView) return
+        // Avoid jumping to a newly created default file while user is editing another board.
+        if (!this.planningView.hasCurrentFile()) this.planningView.refresh()
       })
     )
 
     this.registerEvent(
       this.app.vault.on('delete', (file) => {
-        if (file instanceof TFile && file.path.endsWith('.plan.md')) this.planningView?.refresh()
+        if (!(file instanceof TFile) || !file.path.endsWith('.plan.md')) return
+        if (!this.planningView) return
+        // Only reload if the currently opened plan file was deleted.
+        if (this.planningView.isCurrentFile(file)) this.planningView.refresh()
       })
     )
   }

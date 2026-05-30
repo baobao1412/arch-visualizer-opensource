@@ -45,6 +45,14 @@ export class PlanningBoardView extends ItemView {
     return this.pendingSelfWrites > 0 || Date.now() < this.selfWriteGraceUntil
   }
 
+  hasCurrentFile() {
+    return Boolean(this.currentFile)
+  }
+
+  isCurrentFile(file: TFile) {
+    return this.currentFile?.path === file.path
+  }
+
   async onOpen() { await this.autoLoad() }
   async onClose() { }
 
@@ -58,7 +66,10 @@ export class PlanningBoardView extends ItemView {
       }
     }
 
-    const files = this.obsApp.vault.getFiles().filter((f) => f.path.endsWith('.plan.md'))
+    let files = this.obsApp.vault.getFiles().filter((f) => f.path.endsWith('.plan.md') && f.path.startsWith('planning/'))
+    if (!files.length) {
+      files = this.obsApp.vault.getFiles().filter((f) => f.path.endsWith('.plan.md'))
+    }
     if (!files.length) {
       this.renderEmpty()
       return
