@@ -41,12 +41,14 @@ type Action = { type: string } & Record<string, unknown>
 // ── Webview panel manager ──────────────────────────────────────────────────
 class ArchVisualizerPanel {
   private static instance: ArchVisualizerPanel | undefined
+  private static readonly LAST_PLAN_PATH_KEY = 'archVisualizer.lastPlanFilePath'
 
   private planFilePath: string | null = null
 
   private constructor(
     private readonly panel: vscode.WebviewPanel,
     private readonly extensionUri: vscode.Uri,
+    private readonly context: vscode.ExtensionContext,
     subscriptions: vscode.Disposable[],
   ) {
     panel.webview.html = this.buildHtml()
@@ -80,6 +82,7 @@ class ArchVisualizerPanel {
     ArchVisualizerPanel.instance = new ArchVisualizerPanel(
       panel,
       context.extensionUri,
+      context,
       context.subscriptions,
     )
   }
@@ -172,9 +175,15 @@ class ArchVisualizerPanel {
   }
 
   private async autoLoad(root: string | null): Promise<void> {
-    const p = root ? path.join(root, '.vscode', 'arch-plan.json') : null
-    if (p && fs.existsSync(p)) {
-      this.loadBoard(p)
+    const remembered = this.getRememberedPlanPath(root)
+    if (remembered) {
+      this.loadBoard(remembered)
+      return
+    }
+
+    const fallback = root ? path.join(root, '.vscode', 'arch-plan.json') : null
+    if (fallback && fs.existsSync(fallback)) {
+      this.loadBoard(fallback)
     } else {
       this.post({ type: 'noFile' })
     }
@@ -184,10 +193,22 @@ class ArchVisualizerPanel {
     try {
       const board = readJson<PlanBoard>(filePath)
       this.planFilePath = filePath
+      this.rememberPlanPath(filePath)
       this.post({ type: 'loadBoard', board, filePath })
     } catch (err) {
       this.post({ type: 'error', message: `Cannot load plan: ${String(err)}` })
     }
+  }
+
+  private getRememberedPlanPath(root: string | null): string | null {
+    const remembered = this.context.workspaceState.get<string>(ArchVisualizerPanel.LAST_PLAN_PATH_KEY)
+    if (!remembered || !fs.existsSync(remembered)) return null
+    if (!root) return remembered
+    return remembered.startsWith(root + path.sep) || remembered === root ? remembered : null
+  }
+
+  private rememberPlanPath(filePath: string): void {
+    void this.context.workspaceState.update(ArchVisualizerPanel.LAST_PLAN_PATH_KEY, filePath)
   }
 
   private applyMutation(action: Action): void {
