@@ -5,20 +5,54 @@ import ArchDiagram from './components/ArchDiagram'
 import MermaidMainCanvas from './components/MermaidMainCanvas'
 import MermaidFlowSidebar from './components/MermaidFlowSidebar'
 import PlanningApp from './planning/PlanningApp'
-import { FLOWS } from './data/flows'
+import { FLOWS, type FlowDef } from './data/flows'
 import type { MermaidBlock } from './utils/markdownMermaid'
 import './App.css'
 
 const MarkdownDiagramPanel = lazy(() => import('./components/MarkdownDiagramPanel'))
 
+const APP_STATE_KEY = 'archviz.app.state.v1'
+
+type AppPersistedState = {
+  activeFlowId: string | null
+  orderedFlowIds: string[]
+  planningMode: boolean
+}
+
+function loadAppState(): AppPersistedState | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const raw = localStorage.getItem(APP_STATE_KEY)
+    if (!raw) return null
+    return JSON.parse(raw) as AppPersistedState
+  } catch {
+    return null
+  }
+}
+
+function restoreOrderedFlows(ids: string[] | undefined) {
+  if (!ids?.length) return FLOWS
+  const byId = new Map(FLOWS.map((flow) => [flow.id, flow]))
+  const ordered = ids
+    .map((id) => byId.get(id))
+    .filter((flow): flow is FlowDef => Boolean(flow))
+  const rest = FLOWS.filter((flow) => !ids.includes(flow.id))
+  return [...ordered, ...rest]
+}
+
 export default function App() {
-  const [activeFlowId, setActiveFlowId] = useState<string | null>(null)
-  const [orderedFlows, setOrderedFlows] = useState(FLOWS)
+  const appState = useMemo(() => loadAppState(), [])
+  const [orderedFlows, setOrderedFlows] = useState(() => restoreOrderedFlows(appState?.orderedFlowIds))
+  const [activeFlowId, setActiveFlowId] = useState<string | null>(() => {
+    if (!appState?.activeFlowId) return null
+    return FLOWS.some((flow) => flow.id === appState.activeFlowId) ? appState.activeFlowId : null
+  })
   const [panelOpen, setPanelOpen] = useState<boolean>(false)
   // Default to planning board when running inside Obsidian
-  const [planningMode, setPlanningMode] = useState<boolean>(
-    () => Boolean((window as Window & { __archVizBridge?: unknown }).__archVizBridge)
-  )
+  const [planningMode, setPlanningMode] = useState<boolean>(() => {
+    if (typeof appState?.planningMode === 'boolean') return appState.planningMode
+    return Boolean((window as Window & { __archVizBridge?: unknown }).__archVizBridge)
+  })
   const [mainCanvasBlocks, setMainCanvasBlocks] = useState<MermaidBlock[]>([])
   const [activeMainCanvasBlockId, setActiveMainCanvasBlockId] = useState<string | null>(null)
 
@@ -42,6 +76,15 @@ export default function App() {
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [planningMode, panelOpen])
+
+  useEffect(() => {
+    const state: AppPersistedState = {
+      activeFlowId,
+      orderedFlowIds: orderedFlows.map((flow) => flow.id),
+      planningMode,
+    }
+    localStorage.setItem(APP_STATE_KEY, JSON.stringify(state))
+  }, [activeFlowId, orderedFlows, planningMode])
 
   const modeLabel = planningMode
     ? 'Planning Board'

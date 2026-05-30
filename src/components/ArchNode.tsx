@@ -33,8 +33,8 @@ function ArchNode({ data }: NodeProps<ArchNodeType>) {
         maxWidth: 180,
         opacity,
         boxShadow: shadow,
-        transition: 'all 0.2s ease',
-        cursor: 'default',
+        transition: 'box-shadow 0.15s ease, border-color 0.15s ease, opacity 0.15s ease',
+        cursor: 'grab',
       }}
     >
       <Handle type="target" position={Position.Left} style={{ background: borderColor }} />

@@ -17,6 +17,22 @@ interface Props {
   block: MermaidBlock
 }
 
+type StoredPositions = Record<string, { x: number; y: number }>
+
+function storageKeyForBlock(blockId: string) {
+  return `archviz.mermaid.nodes.${blockId}`
+}
+
+function loadStoredPositions(blockId: string): StoredPositions {
+  if (typeof window === 'undefined') return {}
+  try {
+    const raw = localStorage.getItem(storageKeyForBlock(blockId))
+    return raw ? (JSON.parse(raw) as StoredPositions) : {}
+  } catch {
+    return {}
+  }
+}
+
 // ─── Segmented toggle ────────────────────────────────────────────────────────
 function ViewToggle({
   current,
@@ -254,6 +270,8 @@ export default function MermaidMainCanvas({ block }: Props) {
     [parsedFlow, viewMode]
   )
 
+  const storedPositions = useMemo(() => loadStoredPositions(block.id), [block.id])
+
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
   const [nodes, setNodes, onNodesChange] = useNodesState(graph.nodes)
@@ -264,11 +282,20 @@ export default function MermaidMainCanvas({ block }: Props) {
         const previous = current.find((item) => item.id === node.id)
         return {
           ...node,
-          position: previous?.position ?? node.position,
+          position: previous?.position ?? storedPositions[node.id] ?? node.position,
         }
       })
     )
-  }, [graph.nodes, setNodes])
+  }, [graph.nodes, setNodes, storedPositions])
+
+  useEffect(() => {
+    if (viewMode !== 'interactive') return
+    const nextPositions: StoredPositions = {}
+    for (const node of nodes) {
+      nextPositions[node.id] = { x: node.position.x, y: node.position.y }
+    }
+    localStorage.setItem(storageKeyForBlock(block.id), JSON.stringify(nextPositions))
+  }, [block.id, nodes, viewMode])
 
   const linkedNodeIds = useMemo(() => {
     const ids = new Set<string>()
@@ -556,9 +583,10 @@ export default function MermaidMainCanvas({ block }: Props) {
           nodes={styledNodes}
           edges={edges}
           onNodesChange={onNodesChange}
-          fitView
-          fitViewOptions={{ padding: 0.2 }}
           nodesDraggable
+          onlyRenderVisibleElements
+          minZoom={0.4}
+          maxZoom={2}
           onPaneClick={() => {
             setSelectedNodeId(null)
             setSelectedEdgeId(null)
