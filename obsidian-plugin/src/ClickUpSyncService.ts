@@ -272,6 +272,7 @@ export class ClickUpSyncService {
 
     const statusName = LOCAL_TO_CU_STATUS[task.column.toLowerCase()] || 'to do'
     const priorityNum = LOCAL_TO_CU_PRIORITY[task.priority] ?? 3
+    const targetListId = this.listId || task.clickupListId
 
     // Build description from brief file if available
     let description = task.description || ''
@@ -311,6 +312,17 @@ export class ClickUpSyncService {
             const ok = fallbackResp.status >= 200 && fallbackResp.status < 300
             return { ok, created: false, clickupId, reason: ok ? undefined : `HTTP ${fallbackResp.status}` }
           } catch (fallbackErr) {
+            // Stale clickupId can happen when task was deleted/recreated remotely.
+            if (targetListId) {
+              try {
+                const recreateResp = await this.requestJson<{ id?: string }>(`/list/${targetListId}/task`, 'POST', body)
+                if (recreateResp.status >= 200 && recreateResp.status < 300 && recreateResp.data?.id) {
+                  return { ok: true, created: true, clickupId: recreateResp.data.id }
+                }
+              } catch {
+                // Preserve original errors below.
+              }
+            }
             const reason = fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr)
             const primary = e instanceof Error ? e.message : String(e)
             return { ok: false, created: false, clickupId, reason: `${primary}; fallback(no-status): ${reason}` }
@@ -318,9 +330,9 @@ export class ClickUpSyncService {
         }
       }
 
-      if (!this.listId) return { ok: false, created: false, reason: 'Missing ClickUp listId for create' }
+      if (!targetListId) return { ok: false, created: false, reason: 'Missing ClickUp listId for create' }
 
-      const createResp = await this.requestJson<{ id?: string }>(`/list/${this.listId}/task`, 'POST', body)
+      const createResp = await this.requestJson<{ id?: string }>(`/list/${targetListId}/task`, 'POST', body)
       if (!(createResp.status >= 200 && createResp.status < 300)) return { ok: false, created: true, reason: `HTTP ${createResp.status}` }
       const createdTask = createResp.data || {}
       if (!createdTask.id) return { ok: false, created: true, reason: 'Create response missing task id' }

@@ -401,6 +401,12 @@ alwaysApply: false
       await this.plugin.saveSettings()
     }
 
+    const hasMappedTask = this.board.tasks.some(t => Boolean(t.clickupId))
+    if (!resolvedListId && !hasMappedTask) {
+      new Notice('❌ Sync Up aborted: missing ClickUp List ID. Configure clickupListId in settings or sync down once to map list.')
+      return
+    }
+
     const total = this.board.tasks.length
     if (total === 0) {
       new Notice('No tickets to sync.')
