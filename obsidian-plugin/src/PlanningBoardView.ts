@@ -27,6 +27,7 @@ export class PlanningBoardView extends ItemView {
   private pendingSelfWrites = 0
   private selfWriteGraceUntil = 0
   private writeQueue: Promise<void> = Promise.resolve()
+  private recentSelfSnapshots: string[] = []
   private dragTask: TaskCard | null = null
   private graphMode = false
   private lastPinnedNodeId: string | null = null
@@ -95,6 +96,7 @@ export class PlanningBoardView extends ItemView {
       })
       .then(async () => {
         this.pendingSelfWrites += 1
+        this.trackSelfSnapshot(content)
         try {
           await this.obsApp.vault.modify(file, content)
         } finally {
@@ -107,9 +109,24 @@ export class PlanningBoardView extends ItemView {
     await this.writeQueue
   }
 
+  private trackSelfSnapshot(content: string) {
+    this.recentSelfSnapshots.push(content)
+    if (this.recentSelfSnapshots.length > 20) {
+      this.recentSelfSnapshots.splice(0, this.recentSelfSnapshots.length - 20)
+    }
+  }
+
+  private isKnownSelfSnapshot(content: string): boolean {
+    const idx = this.recentSelfSnapshots.lastIndexOf(content)
+    if (idx === -1) return false
+    this.recentSelfSnapshots.splice(idx, 1)
+    return true
+  }
+
   async handleExternalChange(file: TFile) {
     if (file !== this.currentFile) return
     const content = await this.obsApp.vault.read(file)
+    if (this.isKnownSelfSnapshot(content)) return
     this.board = parsePlanFile(content)
     this.synchronizeFeatureRelations()
     this.render()
