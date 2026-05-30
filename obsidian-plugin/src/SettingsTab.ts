@@ -4,11 +4,19 @@ import type ArchVisualizerPlanningPlugin from './main'
 export interface ArchVisualizerSettings {
   clickupToken: string
   clickupListId: string
+  graphStateByFile?: Record<string, {
+    scale: number
+    tx: number
+    ty: number
+    pinnedNodeId?: string
+    pinnedTooltipNodeId?: string
+  }>
 }
 
 export const DEFAULT_SETTINGS: ArchVisualizerSettings = {
   clickupToken: '',
   clickupListId: '',
+  graphStateByFile: {},
 }
 
 export class ArchVisualizerSettingsTab extends PluginSettingTab {

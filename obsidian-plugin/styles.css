@@ -978,7 +978,7 @@
   -webkit-backdrop-filter: blur(14px) saturate(120%);
   backdrop-filter: blur(14px) saturate(120%);
   opacity: 0;
-  pointer-events: none;
+  pointer-events: auto;
   transform: translateY(4px);
   transition: opacity 0.12s ease, transform 0.12s ease;
 }
@@ -989,6 +989,11 @@
 }
 
 .av-graph-node:hover .av-graph-node-tooltip {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.av-graph-node.is-tooltip-pinned .av-graph-node-tooltip {
   opacity: 1;
   transform: translateY(0);
 }

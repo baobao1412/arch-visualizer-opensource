@@ -28,6 +28,8 @@ export class PlanningBoardView extends ItemView {
   private selfWriteTimeout: ReturnType<typeof setTimeout> | null = null
   private dragTask: TaskCard | null = null
   private graphMode = false
+  private lastPinnedNodeId: string | null = null
+  private lastPinnedTooltipNodeId: string | null = null
 
   constructor(leaf: WorkspaceLeaf, private readonly obsApp: App, private readonly plugin: ArchVisualizerPlanningPlugin) {
     super(leaf)
@@ -55,11 +57,13 @@ export class PlanningBoardView extends ItemView {
     const content = await this.obsApp.vault.read(file)
     this.board = parsePlanFile(content)
     this.currentFile = file
+    this.synchronizeFeatureRelations()
     this.render()
   }
 
   async writeToDisk() {
     if (!this.currentFile || !this.board) return
+    this.synchronizeFeatureRelations()
     const content = serializePlanFile(this.board)
     this.selfWriteFlag = true
     if (this.selfWriteTimeout) clearTimeout(this.selfWriteTimeout)
@@ -71,7 +75,51 @@ export class PlanningBoardView extends ItemView {
     if (file !== this.currentFile) return
     const content = await this.obsApp.vault.read(file)
     this.board = parsePlanFile(content)
+    this.synchronizeFeatureRelations()
     this.render()
+  }
+
+  private synchronizeFeatureRelations() {
+    if (!this.board) return
+    const knownIds = new Set(this.board.tasks.map(t => t.id))
+    for (const task of this.board.tasks) {
+      const inferred = this.extractSubtaskDependencies(task)
+      const merged = [...(task.depends || []), ...inferred]
+      const unique = Array.from(new Set(merged.filter(id => id !== task.id && knownIds.has(id))))
+      task.depends = unique.length ? unique : undefined
+    }
+  }
+
+  private extractSubtaskDependencies(task: TaskCard): string[] {
+    const refs = new Set<string>()
+    const patterns = [
+      /(?:->|=>|@|\[\[)(task-[\w-]+|cu-[\w-]+)/gi,
+      /\b(task-[\w-]+|cu-[\w-]+)\b/gi,
+    ]
+    for (const sub of task.subtasks || []) {
+      const text = sub.text || ''
+      for (const pattern of patterns) {
+        let m: RegExpExecArray | null = null
+        while ((m = pattern.exec(text)) !== null) {
+          if (m[1]) refs.add(m[1])
+        }
+      }
+    }
+    return Array.from(refs)
+  }
+
+  private getGraphMemory() {
+    const key = this.currentFile?.path
+    if (!key) return undefined
+    return this.plugin.settings.graphStateByFile?.[key]
+  }
+
+  private async saveGraphMemory(state: { scale: number; tx: number; ty: number; pinnedNodeId?: string; pinnedTooltipNodeId?: string }) {
+    const key = this.currentFile?.path
+    if (!key) return
+    if (!this.plugin.settings.graphStateByFile) this.plugin.settings.graphStateByFile = {}
+    this.plugin.settings.graphStateByFile[key] = state
+    await this.plugin.saveSettings()
   }
 
   async createNewPlanFile() {
@@ -394,6 +442,7 @@ Based on the review feedback above, please:
 
   private renderGraphView(container: HTMLElement) {
     if (!this.board) return
+    this.synchronizeFeatureRelations()
 
     const PAD_TOP = 36
     const PAD_LEFT = 24
@@ -489,10 +538,13 @@ Based on the review feedback above, please:
     canvas.style.height = `${canvasH}px`
     canvas.style.transformOrigin = '0 0'
 
+    const stored = this.getGraphMemory()
+    if (stored?.pinnedNodeId) this.lastPinnedNodeId = stored.pinnedNodeId
+    if (stored?.pinnedTooltipNodeId) this.lastPinnedTooltipNodeId = stored.pinnedTooltipNodeId
     const viewState = {
-      scale: 1,
-      tx: 0,
-      ty: 0,
+      scale: stored?.scale ?? 1,
+      tx: stored?.tx ?? 0,
+      ty: stored?.ty ?? 0,
       isPanning: false,
       panStartX: 0,
       panStartY: 0,
@@ -543,6 +595,13 @@ Based on the review feedback above, please:
       viewState.tx = px - beforeX * viewState.scale
       viewState.ty = py - beforeY * viewState.scale
       applyViewTransform()
+      void this.saveGraphMemory({
+        scale: viewState.scale,
+        tx: viewState.tx,
+        ty: viewState.ty,
+        pinnedNodeId: pinnedNodeId || undefined,
+        pinnedTooltipNodeId: this.lastPinnedTooltipNodeId || undefined,
+      })
     }, { passive: false })
 
     viewport.addEventListener('pointerdown', (ev: PointerEvent) => {
@@ -569,6 +628,13 @@ Based on the review feedback above, please:
       viewState.isPanning = false
       viewport.classList.remove('is-panning')
       if (viewport.hasPointerCapture(ev.pointerId)) viewport.releasePointerCapture(ev.pointerId)
+      void this.saveGraphMemory({
+        scale: viewState.scale,
+        tx: viewState.tx,
+        ty: viewState.ty,
+        pinnedNodeId: pinnedNodeId || undefined,
+        pinnedTooltipNodeId: this.lastPinnedTooltipNodeId || undefined,
+      })
     })
 
     viewport.addEventListener('dblclick', () => {
@@ -613,8 +679,8 @@ Based on the review feedback above, please:
     const edgeLayer = document.createElementNS(svgNS, 'g')
     svg.appendChild(edgeLayer)
     const nodeById = new Map<string, HTMLElement>()
-    let focusNodeId: string | null = null
-    let pinnedNodeId: string | null = null
+    let focusNodeId: string | null = this.lastPinnedNodeId
+    let pinnedNodeId: string | null = this.lastPinnedNodeId
 
     const edges: Array<{ fromId: string; toId: string }> = []
     for (const task of this.board.tasks) {
@@ -695,6 +761,14 @@ Based on the review feedback above, please:
       redrawEdges()
       refreshNodeFocus()
       if (nodeId) centerOnNode(nodeId)
+      this.lastPinnedNodeId = pinnedNodeId
+      void this.saveGraphMemory({
+        scale: viewState.scale,
+        tx: viewState.tx,
+        ty: viewState.ty,
+        pinnedNodeId: pinnedNodeId || undefined,
+        pinnedTooltipNodeId: this.lastPinnedTooltipNodeId || undefined,
+      })
     }
 
     redrawEdges()
@@ -725,6 +799,7 @@ Based on the review feedback above, please:
 
       const details = node.createDiv({ cls: 'av-graph-node-tooltip' })
       if (p.x > canvasW * 0.62) details.addClass('av-graph-node-tooltip-left')
+      if (this.lastPinnedTooltipNodeId === task.id) node.addClass('is-tooltip-pinned')
       details.createEl('div', { cls: 'av-graph-tooltip-title', text: `${task.id} — ${task.title}` })
       const fields = details.createDiv({ cls: 'av-graph-tooltip-fields' })
       const addField = (label: string, value?: string) => {
@@ -770,6 +845,25 @@ Based on the review feedback above, please:
         if (!pinnedNodeId) applyFocus(null)
       })
 
+      details.addEventListener('mouseenter', () => {
+        node.classList.add('is-tooltip-pinned')
+        this.lastPinnedTooltipNodeId = task.id
+      })
+
+      details.addEventListener('mouseleave', () => {
+        if (this.lastPinnedTooltipNodeId === task.id) {
+          node.classList.remove('is-tooltip-pinned')
+          this.lastPinnedTooltipNodeId = null
+          void this.saveGraphMemory({
+            scale: viewState.scale,
+            tx: viewState.tx,
+            ty: viewState.ty,
+            pinnedNodeId: pinnedNodeId || undefined,
+            pinnedTooltipNodeId: undefined,
+          })
+        }
+      })
+
       node.addEventListener('pointermove', (ev: PointerEvent) => {
         if (!node.hasPointerCapture(ev.pointerId)) return
         const nextX = ev.clientX - dragState.offsetX
@@ -794,6 +888,13 @@ Based on the review feedback above, please:
           applyFocus(pinnedNodeId)
           void this.openEditTask(task)
         }
+        void this.saveGraphMemory({
+          scale: viewState.scale,
+          tx: viewState.tx,
+          ty: viewState.ty,
+          pinnedNodeId: pinnedNodeId || undefined,
+          pinnedTooltipNodeId: this.lastPinnedTooltipNodeId || undefined,
+        })
       })
     }
 
