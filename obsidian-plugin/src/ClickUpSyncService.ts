@@ -171,10 +171,12 @@ export class ClickUpSyncService {
       }
     }
 
-    // Full mirror mode for ClickUp-linked tasks.
+    // Full mirror mode once ClickUp sync is established.
+    // This prevents stale local default tasks from reappearing after remote deletions.
+    const strictMirror = Boolean(this.listId) || board.tasks.some(t => Boolean(t.clickupId))
     const before = board.tasks.length
     board.tasks = board.tasks.filter(task => {
-      if (!task.clickupId) return true
+      if (!task.clickupId) return !strictMirror
       if (this.listId && task.clickupListId && task.clickupListId !== this.listId) return true
       return seenRemoteIds.has(task.clickupId)
     })
