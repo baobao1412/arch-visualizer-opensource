@@ -82,6 +82,7 @@ export class PlanningBoardView extends ItemView {
   async loadFile(file: TFile) {
     const content = await this.obsApp.vault.read(file)
     this.board = parsePlanFile(content)
+    this.normalizeBoardIntegrity()
     this.currentFile = file
     await this.rememberCurrentFilePath()
     this.synchronizeFeatureRelations()
@@ -139,8 +140,38 @@ export class PlanningBoardView extends ItemView {
     const content = await this.obsApp.vault.read(file)
     if (this.isKnownSelfSnapshot(content)) return
     this.board = parsePlanFile(content)
+    this.normalizeBoardIntegrity()
     this.synchronizeFeatureRelations()
     this.render()
+  }
+
+  private normalizeBoardIntegrity() {
+    if (!this.board) return
+    const idCount = new Map<string, number>()
+    const seen = new Set<string>()
+    const fallbackColumn = this.board.columns[0] || 'Todo'
+
+    for (const task of this.board.tasks) {
+      // Keep column in a valid state.
+      if (!this.board.columns.includes(task.column)) task.column = fallbackColumn
+
+      if (!seen.has(task.id)) {
+        seen.add(task.id)
+        idCount.set(task.id, 1)
+        continue
+      }
+
+      const base = task.clickupId ? `cu-${task.clickupId}` : task.id
+      let n = idCount.get(base) || 1
+      let next = base
+      while (seen.has(next)) {
+        n += 1
+        next = `${base}-${n}`
+      }
+      task.id = next
+      seen.add(next)
+      idCount.set(base, n)
+    }
   }
 
   private synchronizeFeatureRelations() {
@@ -371,6 +402,7 @@ alwaysApply: false
         return
       }
       this.board = board
+      this.normalizeBoardIntegrity()
       await this.writeToDisk()
       this.render()
       new Notice(`✅ ClickUp sync done: +${added} new, ~${updated} updated, -${removed} removed, ${briefs} briefs written.`)

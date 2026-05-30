@@ -117,8 +117,10 @@ export class ClickUpSyncService {
         cl.items.map(item => ({ text: item.name, done: item.resolved }))
       )
 
+      const remoteDescRaw = (cu.markdown_description || cu.description || '').trim()
+      const syncedTaskId = this.extractSyncedTaskId(remoteDescRaw)
       // Full description from ClickUp (prefer markdown_description)
-      const fullDesc = this.stripSyncBlock((cu.markdown_description || cu.description || '').trim())
+      const fullDesc = this.stripSyncBlock(remoteDescRaw)
 
       const remoteComments = await this.fetchComments(cu.id)
       const noteComments: TaskComment[] = remoteComments.map(comment => ({
@@ -136,11 +138,13 @@ export class ClickUpSyncService {
       const briefRef = fullDesc ? `briefs/task-${cu.id}.md` : undefined
 
       const cuListId = cu.list?.id || this.listId
-      const existing = board.tasks.find(t => t.clickupId === cu.id)
+      const existing = board.tasks.find(t => syncedTaskId && t.id === syncedTaskId)
+        || board.tasks.find(t => t.clickupId === cu.id)
         || board.tasks.find(t => !t.clickupId && this.normalizeTitle(t.title) === this.normalizeTitle(cu.name))
       if (existing) {
         existing.clickupId = cu.id
         if (cuListId) existing.clickupListId = cuListId
+        if (syncedTaskId && existing.id !== syncedTaskId) existing.id = syncedTaskId
         existing.title = cu.name
         existing.column = colName
         existing.description = fullDesc || existing.description
@@ -152,8 +156,10 @@ export class ClickUpSyncService {
         existing.comments = this.mergeComments(existing.comments, noteComments)
         result.updated++
       } else {
+        const fallbackId = `cu-${cu.id}`
+        const taskId = syncedTaskId && !board.tasks.some(t => t.id === syncedTaskId) ? syncedTaskId : fallbackId
         const newTask: TaskCard = {
-          id: `cu-${cu.id}`,
+          id: taskId,
           title: cu.name,
           description: fullDesc,
           column: colName,
@@ -464,6 +470,17 @@ export class ClickUpSyncService {
     const end = text.indexOf(SYNC_BLOCK_END, start)
     if (end === -1) return text.slice(0, start).trim()
     return `${text.slice(0, start)}${text.slice(end + SYNC_BLOCK_END.length)}`.trim()
+  }
+
+  private extractSyncedTaskId(text: string): string | undefined {
+    if (!text) return undefined
+    const start = text.indexOf(SYNC_BLOCK_START)
+    if (start === -1) return undefined
+    const end = text.indexOf(SYNC_BLOCK_END, start)
+    const block = end === -1 ? text.slice(start) : text.slice(start, end)
+    const m = block.match(/\btaskId:\s*([^\n\r]+)/i)
+    const raw = m?.[1]?.trim()
+    return raw || undefined
   }
 
   private mergeComments(existing: TaskComment[] | undefined, incomingNotes: TaskComment[]): TaskComment[] {
